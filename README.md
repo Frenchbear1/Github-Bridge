@@ -33,6 +33,19 @@ Then get Streamline:
 - To start it automatically at sign-in, press `Win + R`, type `shell:startup`, and put a shortcut to `Start-Streamline.vbs` in that folder.
 - If something goes wrong, the server's messages are in `data\server.log`. For a visible window while troubleshooting, use `Start-Streamline-Debug.bat`.
 
+## Desktop app (Streamline.exe)
+
+Prefer a real app with its own taskbar icon instead of a browser tab and a start file? Download it from the repository's **Releases** page:
+
+- **Streamline-Setup.exe** (recommended): installs for your user only (no admin needed), adds Start menu and desktop shortcuts, and starts quickly. Pin it to the taskbar from the Start menu.
+- **Streamline-Portable.exe**: a single file you can run from anywhere; it unpacks itself on every launch, so it opens a little slower.
+
+It is the same Streamline in its own window. On first run it brings over your saved projects and settings from a browser-version install if it finds one. Closing the window quits Streamline, unless programs you started with **Play** are still running: then it stays in the system tray (click the tray icon to reopen; its menu has **Quit**, which also stops those programs). Its data lives in `%APPDATA%\Streamline`.
+
+Windows may show a "Windows protected your PC" (SmartScreen) notice because the app is not code-signed: choose **More info**, then **Run anyway**.
+
+**Building it yourself:** the exe is built on GitHub's servers by `.github/workflows/build-exe.yml`. Open the **Actions** tab, pick **Build Windows app**, and click **Run workflow** (the files appear under the run's Artifacts), or push a tag such as `v1.0.1` to publish a new Release. Locally: `cd desktop && npm install && npm run dist` on Windows.
+
 ## First-time setup (2 minutes)
 
 1. Open the **Settings** tab. Streamline looks for your `GitHub Projects` folder and `.github-sync\Sync-GitHubProjects.ps1` automatically; check that both paths are right and save. (If you move the folder later, change it here.)
@@ -71,6 +84,7 @@ Once a program is up, Activity marks the run as a **success: running in the back
 
 **Generated launchers stay out of your way.** For projects that need one, Streamline writes `Streamline-Play.bat` into the project folder, so you can also double-click it in Explorer. It adds that file (plus `node_modules/`, `.venv/` and similar, when your `.gitignore` does not already cover them) to the repository's local `.git/info/exclude`. That file is never committed or pushed, so these files do not appear as "untracked", and your sync script will not pause the project. Dependency installs never create or change a lock file, for the same reason. Streamline never overwrites a launcher it did not write, and never uploads `Streamline-Play.bat`.
 
+- **Row buttons** are grouped: **Play** and **Open in...** on the first line, **Pull**, **Upload** and **Remove** on the second.
 - **Sort** the list by recently changed (default, newest file edit, ignoring node_modules and build folders), recently used in Streamline, or name; your choice is remembered.
 - **Open in...** on each row pops up File Explorer, the project's GitHub repository page, plus every code editor Streamline finds on your PC (VS Code, Cursor, Windsurf, VSCodium, Notepad++, Sublime, Zed, Visual Studio, JetBrains IDEs, Android Studio, Notepad, Windows Terminal). Folder-capable editors open the whole project; Notepad opens the main file (README, package.json...). The browser only sends the editor's name, never a path, so nothing else can be launched.
 

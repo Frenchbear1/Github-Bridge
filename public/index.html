@@ -31,10 +31,15 @@
     <div class="panel" id="panel-projects">
       <div class="toolbar">
         <input id="projSearch" type="search" placeholder="Search projects…" autocomplete="off">
-        <select id="projSort" title="Sort projects"><option value="changed">Recently changed</option><option value="used">Recently used here</option><option value="name">Name (A&ndash;Z)</option></select>
-        <button id="addFolderBtn" class="btn">Add existing folder…</button>
-        <button id="scanBtn" class="btn">Import from projects folder</button>
-        <button id="checkBtn" class="btn primary" title="Tries every project's Play button in the background and reports what works">Check all projects</button>
+        <select id="projSort" title="Sort projects"><option value="changed">Last changed</option><option value="used">Last used</option><option value="name">Name A&ndash;Z</option></select>
+        <details class="menu" id="projMenu">
+          <summary class="btn" title="More">&#8943;</summary>
+          <div class="menu-pop">
+            <button id="addFolderBtn" class="btn ghost">Add existing folder&hellip;</button>
+            <button id="scanBtn" class="btn ghost">Import from projects folder</button>
+          </div>
+        </details>
+        <button id="checkBtn" class="btn primary" title="Tries every project's Play button in the background and reports what works">Check all</button>
       </div>
       <div id="healthBar" class="healthbar hidden"></div>
       <div id="projMsg" class="notice hidden"></div>

@@ -109,6 +109,9 @@ try { $('projSort').value = localStorage.getItem('sl.sort') || 'changed'; } catc
 if (!$('projSort').value) $('projSort').value = 'changed';
 $('projSort').addEventListener('change', () => { try { localStorage.setItem('sl.sort', $('projSort').value); } catch { /* ignore */ } renderProjects(); });
 
+// the ⋯ menu closes when you pick something or click elsewhere
+document.addEventListener('click', e => { const m = $('projMenu'); if (m.open && (!m.contains(e.target) || e.target.closest('.menu-pop button'))) m.open = false; });
+
 const openProblems = new Set();
 
 function renderProjects() {
@@ -156,12 +159,15 @@ function renderProjects() {
         plan && plan.canPlay ? h('div', { class: 'how', title: (plan.notes || []).join(' ') }, how, h('button', { class: 'linkish', title: 'Not right? Set it up differently', onclick: () => openPlayDialog(p) }, 'Change\u2026')) : null,
         h('div', { class: 'path', title: p.localPath }, p.localPath)),
       h('div', { class: 'actions' },
-        playBtn,
-        run && run.link ? h('a', { class: 'btn small', href: run.link, target: '_blank', rel: 'noopener' }, 'Open') : null,
-        h('button', { class: 'btn small', onclick: () => { $('upRepo').value = p.id; showTab('upload'); schedulePreview(); } }, 'Upload'),
-        h('button', { class: 'btn small', onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/pull`)).jobId); } catch (e) { alert(e.message); } } }, 'Pull'),
-        h('button', { class: 'btn small', title: 'Open in File Explorer, VS Code, Notepad and other installed programs', onclick: () => openWith(p) }, 'Open in\u2026'),
-        rm),
+        // row 1: run it and look at it. row 2: sync with GitHub, then remove
+        h('div', { class: 'arow' },
+          playBtn,
+          run && run.link ? h('a', { class: 'btn small', href: run.link, target: '_blank', rel: 'noopener' }, 'Open') : null,
+          h('button', { class: 'btn small', title: 'Open in File Explorer, the GitHub page, VS Code, Notepad and other installed programs', onclick: () => openWith(p) }, 'Open in\u2026')),
+        h('div', { class: 'arow' },
+          h('button', { class: 'btn small', title: 'Download the latest changes from GitHub', onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/pull`)).jobId); } catch (e) { alert(e.message); } } }, '\u2193 Pull'),
+          h('button', { class: 'btn small', title: 'Send your changes to GitHub', onclick: () => { $('upRepo').value = p.id; showTab('upload'); schedulePreview(); } }, '\u2191 Upload'),
+          rm)),
       problem));
   }
 }
@@ -319,7 +325,7 @@ function renderHealth() {
   const jj = [...jobs.values()].find(j => j.meta.type === 'check' && j.meta.status === 'running');
   const job = jj && jj.meta;
   bar.append(h('span', { class: 'grow' },
-    hs.running ? `Checking projects${job && job.progress ? ': ' + job.progress : '…'}` : `Last check${hs.at ? ' ' + new Date(hs.at).toLocaleString() : ''}: `,
+    hs.running ? `Checking projects${job && job.progress ? ': ' + job.progress : '…'}` : `Last check${hs.at ? ' ' + (new Date(hs.at).toDateString() === new Date().toDateString() ? new Date(hs.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : new Date(hs.at).toLocaleDateString()) : ''}: `,
     hs.running ? null : h('strong', {}, `${c.ok || 0} work`), hs.running ? null : `, ${c.fail || 0} failed`, !hs.running && c.warn ? `, ${c.warn} unsure` : null, !hs.running && c.skip ? `, ${c.skip} not tested` : null, !hs.running && c.ignored ? `, ${c.ignored} ignored` : null));
   if (!hs.running && ((c.fail || 0) + (c.warn || 0)) > 0) bar.append(h('button', { class: 'btn small primary', onclick: openFixDialog }, 'Fix failures with ChatGPT…'));
 }
