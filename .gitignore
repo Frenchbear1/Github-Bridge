@@ -6,4 +6,4 @@ data/
 Thumbs.db
 desktop/node_modules/
 desktop/dist/
-desktop/app/
+desktop/server/

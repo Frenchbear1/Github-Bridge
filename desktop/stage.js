@@ -1,9 +1,9 @@
 'use strict';
-// Copies the Streamline server (kept dependency-free in the repo root) into ./app so electron-builder can package it.
+// Copies the Streamline server (kept dependency-free in the repo root) into ./server so electron-builder can package it.
 const fs = require('fs');
 const path = require('path');
 const root = path.join(__dirname, '..');
-const out = path.join(__dirname, 'app');
+const out = path.join(__dirname, 'server');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 for (const item of ['server.js', 'lib', 'public']) fs.cpSync(path.join(root, item), path.join(out, item), { recursive: true });

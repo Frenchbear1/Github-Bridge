@@ -20,7 +20,7 @@
     "appId": "com.frenchbear1.streamline",
     "productName": "Streamline",
     "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["main.js", "icon.png", "app/**", "package.json"],
+    "files": ["main.js", "icon.png", "server/**", "package.json"],
     "win": { "icon": "build/icon.ico", "target": ["nsis", "portable"] },
     "nsis": {
       "oneClick": true,

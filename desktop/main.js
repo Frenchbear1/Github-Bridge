@@ -56,15 +56,15 @@ async function ensureServer() {
   process.env.STREAMLINE_DATA = dataDir;
   process.env.PORT = String(PORT);
   if (!SMOKE) importOldData(dataDir);
-  require('./app/server.js');
+  require('./server/server.js');
   for (let i = 0; i < 60; i++) { if (await portOpen(PORT)) return; await sleep(250); }
   throw new Error('The Streamline server did not start.');
 }
 
-const liveJobs = () => { try { return require('./app/lib/jobs').list().filter(j => j.status === 'running' || j.live); } catch { return []; } };
+const liveJobs = () => { try { return require('./server/lib/jobs').list().filter(j => j.status === 'running' || j.live); } catch { return []; } };
 function stopEverythingAndQuit() {
   quitting = true;
-  try { const jobs = require('./app/lib/jobs'); for (const j of liveJobs()) jobs.cancel(j.id); } catch { /* nothing to stop */ }
+  try { const jobs = require('./server/lib/jobs'); for (const j of liveJobs()) jobs.cancel(j.id); } catch { /* nothing to stop */ }
   setTimeout(() => app.quit(), 400);
 }
 
