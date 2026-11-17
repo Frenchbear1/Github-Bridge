@@ -170,3 +170,8 @@ dialog.small { width: min(380px, 92vw); }
 .problem { display: flex; gap: 12px; align-items: flex-start; }
 .problem .pbody { flex: 1; min-width: 0; }
 .problem > .btn { flex-shrink: 0; white-space: nowrap; }
+
+.item { flex-wrap: wrap; }
+.item .problem { flex: 1 0 100%; order: 3; margin: 2px 0 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.item .problem .pbody { font-size: 12.5px; }
+.item .problem pre { max-height: 160px; }

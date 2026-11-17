@@ -147,7 +147,6 @@ function renderProjects() {
       h('div', { class: 'grow' },
         h('div', { class: 'name' }, p.name, h('span', { class: 'tag' }, p.branch), p.exists ? null : h('span', { class: 'tag bad' }, 'folder missing'), run ? h('span', { class: 'tag live' }, 'running') : null, plan && plan.source === 'custom' ? h('span', { class: 'tag custom' }, 'custom') : null, hTag),
         plan && plan.canPlay ? h('div', { class: 'how', title: (plan.notes || []).join(' ') }, how, h('button', { class: 'linkish', title: 'Not right? Set it up differently', onclick: () => openPlayDialog(p) }, 'Change\u2026')) : null,
-        problem,
         h('div', { class: 'path', title: p.localPath }, p.localPath)),
       h('div', { class: 'actions' },
         playBtn,
@@ -155,7 +154,8 @@ function renderProjects() {
         h('button', { class: 'btn small', onclick: () => { $('upRepo').value = p.id; showTab('upload'); schedulePreview(); } }, 'Upload'),
         h('button', { class: 'btn small', onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/pull`)).jobId); } catch (e) { alert(e.message); } } }, 'Pull'),
         h('button', { class: 'btn small', title: 'Open in File Explorer, VS Code, Notepad and other installed programs', onclick: () => openWith(p) }, 'Open in\u2026'),
-        rm)));
+        rm),
+      problem));
   }
 }
 $('projSearch').addEventListener('input', renderProjects);
