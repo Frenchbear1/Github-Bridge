@@ -180,3 +180,5 @@ dialog.small { width: min(380px, 92vw); }
 .tag.fail.ignored { opacity: .6; }
 
 #projSort { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; }
+
+.tag.ignored { background: #fff; color: var(--muted, #667); border: 1px solid var(--line); cursor: pointer; }

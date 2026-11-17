@@ -141,8 +141,8 @@ function renderProjects() {
         plan.stopFile ? h('button', { class: 'btn small ghost', title: `Runs ${plan.stopFile}`, onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, 'Stop') : null);
     }
     const open = openProblems.has(p.id);
-    const hTag = hr && !run ? h('span', { class: 'tag ' + hr.status, title: hr.note || hr.problem || '', onclick: () => { if (hr.status === 'fail' || hr.status === 'warn') { open ? openProblems.delete(p.id) : openProblems.add(p.id); renderProjects(); } } },
-      (hr.ignored ? { fail: '\u2717 failed (ignored)', warn: '? unsure (ignored)' }[hr.status] : { ok: '\u2713 works', fail: '\u2717 failed', warn: '? unsure', skip: 'not tested' }[hr.status]) || hr.status) : null;
+    const hTag = hr && !run ? h('span', { class: 'tag ' + (hr.ignored ? 'ignored' : hr.status), title: hr.note || hr.problem || '', onclick: () => { if (hr.status === 'fail' || hr.status === 'warn') { open ? openProblems.delete(p.id) : openProblems.add(p.id); renderProjects(); } } },
+      (hr.ignored ? 'ignored' : { ok: '\u2713 works', fail: '\u2717 failed', warn: '? unsure', skip: 'not tested' }[hr.status]) || hr.status) : null;
     const problem = hr && open && (hr.status === 'fail' || hr.status === 'warn')
       ? h('div', { class: 'problem' },
         h('div', { class: 'pbody' }, h('div', {}, hr.problem), (hr.output || []).length ? h('pre', {}, hr.output.join('\n')) : null),
