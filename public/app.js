@@ -102,6 +102,13 @@ function playingJob(projectId) {
   return [...jobs.values()].map(j => j.meta).find(m => m.type === 'play' && (m.status === 'running' || m.live) && m.projectId === projectId) || null;
 }
 
+const sortFn = mode => mode === 'name' ? (a, b) => a.name.localeCompare(b.name)
+  : mode === 'used' ? (a, b) => (b.lastUsed || '').localeCompare(a.lastUsed || '') || a.name.localeCompare(b.name)
+  : (a, b) => (b.modified || 0) - (a.modified || 0) || a.name.localeCompare(b.name);
+try { $('projSort').value = localStorage.getItem('sl.sort') || 'changed'; } catch { /* default */ }
+if (!$('projSort').value) $('projSort').value = 'changed';
+$('projSort').addEventListener('change', () => { try { localStorage.setItem('sl.sort', $('projSort').value); } catch { /* ignore */ } renderProjects(); });
+
 const openProblems = new Set();
 
 function renderProjects() {
@@ -110,7 +117,7 @@ function renderProjects() {
   list.replaceChildren();
   const shown = state.projects
     .filter(p => !q || p.name.toLowerCase().includes(q) || p.localPath.toLowerCase().includes(q))
-    .sort((a, b) => (b.lastUsed || '').localeCompare(a.lastUsed || '') || a.name.localeCompare(b.name));
+    .sort(sortFn($('projSort').value));
   if (!shown.length) {
     list.append(h('div', { class: 'empty' }, state.projects.length ? 'No projects match.' : 'No saved projects yet. Clone a repository, or import the ones already in your projects folder.'));
     return;

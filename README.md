@@ -71,6 +71,7 @@ Once a program is up, Activity marks the run as a **success: running in the back
 
 **Generated launchers stay out of your way.** For projects that need one, Streamline writes `Streamline-Play.bat` into the project folder, so you can also double-click it in Explorer. It adds that file (plus `node_modules/`, `.venv/` and similar, when your `.gitignore` does not already cover them) to the repository's local `.git/info/exclude`. That file is never committed or pushed, so these files do not appear as "untracked", and your sync script will not pause the project. Dependency installs never create or change a lock file, for the same reason. Streamline never overwrites a launcher it did not write, and never uploads `Streamline-Play.bat`.
 
+- **Sort** the list by recently changed (default, newest file edit, ignoring node_modules and build folders), recently used in Streamline, or name; your choice is remembered.
 - **Open in...** on each row pops up File Explorer, the project's GitHub repository page, plus every code editor Streamline finds on your PC (VS Code, Cursor, Windsurf, VSCodium, Notepad++, Sublime, Zed, Visual Studio, JetBrains IDEs, Android Studio, Notepad, Windows Terminal). Folder-capable editors open the whole project; Notepad opens the main file (README, package.json...). The browser only sends the editor's name, never a path, so nothing else can be launched.
 
 ### When Play does not work: check everything, then let ChatGPT fix it

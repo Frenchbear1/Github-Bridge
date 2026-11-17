@@ -15,6 +15,7 @@ const launch = require('./lib/launch');
 const custom = require('./lib/custom');
 const health = require('./lib/health');
 const editors = require('./lib/editors');
+const { newestChange } = require('./lib/modified');
 const { buildPrompt } = require('./lib/prompt');
 const { openUrl, openFolderWindow } = require('./lib/open');
 const { DEFAULTS } = require('./lib/exclusions');
@@ -107,7 +108,7 @@ const routes = {
       platform: process.platform,
       settings,
       defaults: DEFAULTS.map(({ id, glob, why, locked }) => ({ id, glob, why, locked: !!locked })),
-      projects: store.getProjects().map(p => ({ ...p, exists: fs.existsSync(p.localPath) })),
+      projects: store.getProjects().map(p => { const exists = fs.existsSync(p.localPath); return { ...p, exists, modified: exists ? newestChange(p.localPath) : 0 }; }),
       auth: a,
       git: { found: g.code === 0, version: g.out },
       syncScriptFound: !!settings.syncScript && fs.existsSync(settings.syncScript),

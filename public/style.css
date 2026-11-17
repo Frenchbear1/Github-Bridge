@@ -178,3 +178,5 @@ dialog.small { width: min(380px, 92vw); }
 
 .problem .pbtns { display: flex; flex-direction: column; gap: 6px; align-items: stretch; flex-shrink: 0; }
 .tag.fail.ignored { opacity: .6; }
+
+#projSort { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; }
