@@ -44,7 +44,7 @@ It is the same Streamline in its own window. On first run it brings over your sa
 
 Windows may show a "Windows protected your PC" (SmartScreen) notice because the app is not code-signed: choose **More info**, then **Run anyway**.
 
-**Building it yourself:** the exe is built on GitHub's servers by `.github/workflows/build-exe.yml`. Open the **Actions** tab, pick **Build Windows app**, and click **Run workflow** (the files appear under the run's Artifacts), or push a tag such as `v1.0.1` to publish a new Release. Locally: `cd desktop && npm install && npm run dist` on Windows.
+**Building it yourself:** the exe is built on GitHub's servers by `.github/workflows/build-exe.yml`. Open the **Actions** tab, pick **Build Windows app**, and click **Run workflow** ; every successful run publishes a new Release with both exes. It also runs by itself whenever the app's code changes on `main`. Locally: `cd desktop && npm install && npm run dist` on Windows.
 
 ## First-time setup (2 minutes)
 

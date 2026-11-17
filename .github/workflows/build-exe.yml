@@ -1,11 +1,12 @@
 name: Build Windows app
 
 # Builds Streamline-Setup.exe (installer) and Streamline-Portable.exe on GitHub's Windows servers.
-# Run it from the Actions tab ("Run workflow"), or push a tag like v1.0.0 to also publish a Release.
+# Runs when the app's code changes on main, or from the Actions tab ("Run workflow"), and publishes a Release.
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: ['desktop/**', 'server.js', 'lib/**', 'public/**', '.github/workflows/build-exe.yml']
 
 permissions:
   contents: write
@@ -45,10 +46,13 @@ jobs:
             desktop/dist/Streamline-Setup.exe
             desktop/dist/Streamline-Portable.exe
 
-      - name: Publish a Release (tags only)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish a Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: build-${{ github.run_number }}
+          name: Streamline (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: |
             desktop/dist/Streamline-Setup.exe
             desktop/dist/Streamline-Portable.exe
