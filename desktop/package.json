@@ -1,0 +1,35 @@
+{
+  "name": "streamline-desktop",
+  "productName": "Streamline",
+  "version": "1.0.0",
+  "description": "Streamline: a simple local GitHub project manager",
+  "main": "main.js",
+  "author": "Frenchbear1",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "stage": "node stage.js",
+    "start": "node stage.js && electron .",
+    "dist": "node stage.js && electron-builder --win nsis portable --publish never"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.frenchbear1.streamline",
+    "productName": "Streamline",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "icon.png", "app/**", "package.json"],
+    "win": { "icon": "build/icon.ico", "target": ["nsis", "portable"] },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Streamline",
+      "artifactName": "Streamline-Setup.exe"
+    },
+    "portable": { "artifactName": "Streamline-Portable.exe" }
+  }
+}

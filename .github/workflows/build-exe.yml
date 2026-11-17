@@ -1,0 +1,55 @@
+name: Build Windows app
+
+# Builds Streamline-Setup.exe (installer) and Streamline-Portable.exe on GitHub's Windows servers.
+# Run it from the Actions tab ("Run workflow"), or push a tag like v1.0.0 to also publish a Release.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install build tools
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Build the app
+        working-directory: desktop
+        run: npm run dist
+
+      - name: Smoke test (starts the real app and checks it serves)
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath ".\dist\win-unpacked\Streamline.exe" -ArgumentList "--smoke-test" -PassThru -Wait
+          Write-Host "Exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Streamline-Windows
+          path: |
+            desktop/dist/Streamline-Setup.exe
+            desktop/dist/Streamline-Portable.exe
+
+      - name: Publish a Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/dist/Streamline-Setup.exe
+            desktop/dist/Streamline-Portable.exe
+          generate_release_notes: true
