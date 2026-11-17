@@ -15,7 +15,6 @@ const launch = require('./lib/launch');
 const custom = require('./lib/custom');
 const health = require('./lib/health');
 const editors = require('./lib/editors');
-const create = require('./lib/create');
 const { newestChange } = require('./lib/modified');
 const { buildPrompt } = require('./lib/prompt');
 const { openUrl, openFolderWindow } = require('./lib/open');
@@ -124,7 +123,6 @@ const routes = {
   'GET /api/jobs': async () => ({ jobs: jobs.list() }),
   'POST /api/jobs/clear': async () => { jobs.clearFinished(); return { ok: true }; },
 
-  'POST /api/create': async ({ body }) => ({ jobId: create.startCreate(body) }),
   'POST /api/clone': async ({ body }) => ({ jobId: clone.startClone({ url: body.url, parent: body.parent }) }),
 
   'POST /api/projects': async ({ body }) => {

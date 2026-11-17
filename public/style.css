@@ -182,8 +182,3 @@ dialog.small { width: min(380px, 92vw); }
 #projSort { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); font: inherit; }
 
 .tag.ignored { background: #fff; color: var(--muted, #667); border: 1px solid var(--line); cursor: pointer; }
-
-.choices { display: flex; flex-direction: column; gap: 6px; }
-.choice { display: flex; align-items: baseline; gap: 8px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; background: var(--card); }
-.choice small { color: var(--muted, #667); }
-.choice:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }

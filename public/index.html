@@ -25,7 +25,6 @@
       <button data-tab="projects" class="active">Projects</button>
       <button data-tab="upload">Upload</button>
       <button data-tab="clone">Clone</button>
-      <button data-tab="create">New repository</button>
       <button data-tab="settings">Settings</button>
     </nav>
 
@@ -79,39 +78,6 @@
       <div id="clNotice" class="notice hidden"></div>
       <div class="row end"><button id="clBtn" class="btn primary big">Clone</button></div>
       <p class="hint">Private repositories work when you are signed in to GitHub (top right).</p>
-    </div>
-
-    <div class="panel hidden" id="panel-create">
-      <label class="field"><span>Repository name</span>
-        <input id="crName" type="text" placeholder="my-new-project" autocomplete="off" spellcheck="false">
-        <small id="crNameHint" class="hint">Letters, numbers, dashes, dots and underscores. No spaces.</small>
-      </label>
-      <label class="field"><span>Description <em class="hint">(optional)</em></span>
-        <input id="crDesc" type="text" maxlength="350" autocomplete="off">
-      </label>
-      <div class="field"><span>Who can see it</span>
-        <div class="choices">
-          <label class="choice"><input type="radio" name="crVis" value="private" checked> <strong>Private</strong> <small>only you</small></label>
-          <label class="choice"><input type="radio" name="crVis" value="public"> <strong>Public</strong> <small>anyone on the internet</small></label>
-        </div>
-      </div>
-      <div class="field"><span>Where do the files come from?</span>
-        <div class="choices">
-          <label class="choice"><input type="radio" name="crMode" value="new" checked> <strong>Start with a new empty folder</strong> <small>a README is added</small></label>
-          <label class="choice"><input type="radio" name="crMode" value="existing"> <strong>I already have a folder</strong> <small>its files are uploaded</small></label>
-        </div>
-      </div>
-      <div class="field" id="crParentBox"><span>Create the folder inside</span>
-        <div class="row"><input id="crParent" type="text" autocomplete="off"><button id="crBrowseParent" class="btn">Browse&hellip;</button></div>
-        <small id="crDest" class="hint"></small>
-      </div>
-      <div class="field hidden" id="crFolderBox"><span>Folder to upload</span>
-        <div class="row"><input id="crFolder" type="text" autocomplete="off"><button id="crBrowseFolder" class="btn">Browse&hellip;</button></div>
-        <small class="hint">Dependencies, build folders and .env files are left out automatically.</small>
-      </div>
-      <div id="crNotice" class="notice hidden"></div>
-      <div class="row end"><button id="crBtn" class="btn primary big">Create repository</button></div>
-      <p class="hint">Needs you to be signed in to GitHub (top right). The new repository is saved to your projects when it is done.</p>
     </div>
 
     <div class="panel hidden" id="panel-settings">
