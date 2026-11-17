@@ -192,6 +192,11 @@ async function handleApi(req, res, url) {
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/pull$/)) && req.method === 'POST') {
     return send(res, 200, { jobId: clone.startPull(findProject(m[1])) });
   }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/prompt$/)) && req.method === 'POST') {
+    const f = body.failure || {};
+    const failure = { problem: String(f.problem || '').slice(0, 600), output: (Array.isArray(f.output) ? f.output : []).slice(-40).map(l => String(l).slice(0, 400)) };
+    return send(res, 200, await buildPrompt(findProject(m[1]), failure));
+  }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/prompt$/)) && req.method === 'GET') {
     return send(res, 200, await buildPrompt(findProject(m[1])));
   }

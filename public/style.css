@@ -166,3 +166,7 @@ dialog.small { width: min(380px, 92vw); }
 .openlist { display: flex; flex-direction: column; gap: 6px; }
 .openlist .btn { text-align: left; justify-content: flex-start; width: 100%; }
 .openlist .sub { color: var(--muted, #667); font-size: 12px; margin-left: 6px; }
+
+.problem { display: flex; gap: 12px; align-items: flex-start; }
+.problem .pbody { flex: 1; min-width: 0; }
+.problem > .btn { flex-shrink: 0; white-space: nowrap; }

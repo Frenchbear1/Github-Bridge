@@ -139,7 +139,9 @@ function renderProjects() {
     const hTag = hr && !run ? h('span', { class: 'tag ' + hr.status, title: hr.note || hr.problem || '', onclick: () => { if (hr.status === 'fail' || hr.status === 'warn') { open ? openProblems.delete(p.id) : openProblems.add(p.id); renderProjects(); } } },
       { ok: '\u2713 works', fail: '\u2717 failed', warn: '? unsure', skip: 'not tested' }[hr.status] || hr.status) : null;
     const problem = hr && open && (hr.status === 'fail' || hr.status === 'warn')
-      ? h('div', { class: 'problem' }, h('div', {}, hr.problem), (hr.output || []).length ? h('pre', {}, hr.output.join('\n')) : null) : null;
+      ? h('div', { class: 'problem' },
+        h('div', { class: 'pbody' }, h('div', {}, hr.problem), (hr.output || []).length ? h('pre', {}, hr.output.join('\n')) : null),
+        h('button', { class: 'btn small primary', title: 'Builds a ChatGPT prompt that includes this error', onclick: () => openPlayDialog(p, { problem: hr.problem, output: hr.output || [] }) }, 'Fix with ChatGPT\u2026')) : null;
     const how = plan ? [plan.label, plan.detail].filter(Boolean).join(' \u00B7 ') : '';
     list.append(h('div', { class: 'item' },
       h('div', { class: 'grow' },
@@ -182,11 +184,13 @@ $('scanBtn').addEventListener('click', async () => {
 /* ---------- Set up Play (ChatGPT fallback) ---------- */
 const dlg = { project: null, timer: null, seq: 0 };
 
-async function openPlayDialog(p) {
+async function openPlayDialog(p, failure) {
   dlg.project = p;
   const plan = state.plans[p.id] || {};
   $('dlgTitle').textContent = `Set up Play: ${p.name}`;
-  $('dlgWhy').textContent = plan.canPlay
+  $('dlgWhy').textContent = failure
+    ? `Play failed (${failure.problem || 'it exited with an error'}). The prompt below includes the error, so ChatGPT can work out what to change. Paste its reply back here and Streamline applies it.`
+    : plan.canPlay
     ? `Streamline will currently run this as "${plan.label}" (${plan.detail}). If that is not what you want, replace it with a setup from ChatGPT.`
     : `Streamline could not tell how to run this project${plan.detail ? ` (${plan.detail})` : ''}. ChatGPT can work it out from the project's files, and you paste its answer back here.`;
   $('dlgReply').value = ''; $('dlgResult').replaceChildren(); $('dlgCopied').textContent = '';
@@ -195,7 +199,7 @@ async function openPlayDialog(p) {
   $('dlgPrompt').value = 'Preparing…'; $('dlgChars').textContent = '';
   if (!$('playDlg').open) $('playDlg').showModal();
   try {
-    const r = await api('GET', `/api/projects/${p.id}/prompt`);
+    const r = failure ? await api('POST', `/api/projects/${p.id}/prompt`, { failure }) : await api('GET', `/api/projects/${p.id}/prompt`);
     $('dlgPrompt').value = r.prompt;
     $('dlgChars').textContent = `(${r.chars.toLocaleString()} characters, ${r.included.length} files)`;
   } catch (e) { $('dlgPrompt').value = ''; $('dlgResult').replaceChildren(h('div', { class: 'notice err' }, e.message)); }
@@ -547,7 +551,16 @@ async function loadLines(j) {
   renderJobs();
 }
 
+async function autoFixAfterFailure(meta) {
+  const p = state.projects.find(x => x.id === meta.projectId);
+  if (!p || $('playDlg').open || $('fixDlg').open) return;
+  let out = [];
+  try { out = (await api('GET', `/api/jobs/${meta.id}/lines`)).lines.map(l => l.text); } catch { /* still useful without it */ }
+  openPlayDialog(p, { problem: meta.summary, output: out.slice(-25) });
+}
+
 function onJobFinished(meta) {
+  if (meta.type === 'play' && meta.status === 'error' && meta.projectId) autoFixAfterFailure(meta);
   if (meta.type === 'clone' || meta.type === 'pull') loadState();
   if (meta.type === 'login') { api('GET', '/api/auth').then(a => { state.auth = a; renderAuth(); }); }
   if (meta.type === 'upload') schedulePreview();
