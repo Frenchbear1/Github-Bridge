@@ -1,7 +1,7 @@
 'use strict';
 /* Streamline front end. All dynamic text is inserted with textContent (never innerHTML). */
 const $ = id => document.getElementById(id);
-const state = { settings: null, projects: [], defaults: [], auth: null, platform: '', syncScriptFound: false, plans: {} };
+const state = { settings: null, projects: [], defaults: [], auth: null, platform: '', plans: {} };
 const jobs = new Map();          // id -> { meta, lines, open, loaded }
 let items = [];                  // upload selection
 let lastPreview = null;
@@ -89,7 +89,53 @@ function renderSyncBtn() {
   const b = $('syncBtn');
   b.disabled = running;
   b.textContent = running ? 'Updating…' : 'Update Local GitHub';
-  b.title = state.syncScriptFound ? 'Runs your Sync-GitHubProjects.ps1 in the background' : 'Sync script not found. Set it in Settings.';
+  b.title = 'Check GitHub and bring every project up to date. Projects with local changes are never touched.';
+  renderSyncBar();
+}
+
+// A slim status bar under the header: live progress while updating, then a plain-language result.
+const syncDismissed = new Set();
+function renderSyncBar() {
+  const bar = $('syncBar');
+  const syncs = [...jobs.values()].filter(j => j.meta.type === 'sync').sort((a, b) => b.meta.startedAt.localeCompare(a.meta.startedAt));
+  const j = syncs[0];
+  const m = j && j.meta;
+  const fresh = m && (m.status === 'running' || (!syncDismissed.has(m.id) && Date.now() - new Date(m.finishedAt || m.startedAt).getTime() < 15 * 60 * 1000 && j.seenRunning));
+  if (m && m.status === 'running') j.seenRunning = true;
+  if (!fresh) { bar.classList.add('hidden'); bar.replaceChildren(); return; }
+  bar.classList.remove('hidden');
+  const s = m.sync || {};
+  const chip = (n, label, cls) => n ? h('span', { class: 'chip ' + cls }, `${n} ${label}`) : null;
+  if (m.status === 'running') {
+    const pct = s.total ? Math.round((s.done / s.total) * 100) : 0;
+    bar.className = 'syncbar running';
+    bar.replaceChildren(
+      h('div', { class: 'sb-top' },
+        h('span', { class: 'spin' }),
+        h('strong', {}, s.total && s.done ? `Updating projects: ${s.done} of ${s.total}` : (s.phase || 'Starting') + '…'),
+        h('span', { class: 'sb-chips' }, chip(s.updated, 'updated', 'ok'), chip(s.cloned, 'downloaded', 'ok'), chip(s.paused, 'paused', 'warn'), chip(s.errors, s.errors === 1 ? 'error' : 'errors', 'err')),
+        h('button', { class: 'btn small', onclick: () => api('POST', `/api/jobs/${m.id}/cancel`) }, 'Cancel')),
+      h('div', { class: 'sb-track' + (s.total ? '' : ' indet') }, h('div', { class: 'sb-fill', style: `width:${pct}%` })));
+    return;
+  }
+  const rs = m.results || [];
+  const group = (state, title, cls) => {
+    const items = rs.filter(r => r.state === state);
+    if (!items.length) return null;
+    // Good news is a compact list of names; things that need you get one line each with the reason.
+    const body = (state === 'Paused' || state === 'Error')
+      ? items.map(r => h('div', { class: 'sb-row' }, h('span', { class: 'sb-name' }, r.name), h('span', { class: 'sb-why' }, r.detail)))
+      : [h('div', { class: 'sb-names' }, items.map(r => h('span', { class: 'sb-pill' }, r.name)))];
+    return h('div', { class: 'sb-group ' + cls }, h('div', { class: 'sb-gtitle' }, `${title} (${items.length})`), ...body);
+  };
+  const detailed = rs.some(r => ['Updated', 'Cloned', 'Paused', 'Error'].includes(r.state));
+  bar.className = 'syncbar done ' + m.status;
+  bar.replaceChildren(
+    h('div', { class: 'sb-top' },
+      h('strong', {}, m.status === 'cancelled' ? 'Update cancelled' : m.status === 'error' ? 'Update failed' : (m.status === 'warning' ? 'Update finished with problems' : ((s.paused || s.updated || s.cloned) ? 'Update finished' : 'Everything is up to date'))),
+      h('span', { class: 'sb-sum' }, m.summary),
+      h('button', { class: 'btn small ghost', title: 'Dismiss', onclick: () => { syncDismissed.add(m.id); renderSyncBar(); } }, '\u2715')),
+    detailed ? h('div', { class: 'sb-groups' }, group('Error', 'Could not update', 'err'), group('Paused', 'Paused to protect your work', 'warn'), group('Updated', 'Updated', 'ok'), group('Cloned', 'Downloaded', 'ok')) : null);
 }
 
 $('syncBtn').addEventListener('click', async () => {
@@ -514,11 +560,14 @@ $('upBtn').addEventListener('click', async () => {
 /* ---------- settings ---------- */
 function renderSettings() {
   const s = state.settings;
-  $('sSync').value = s.syncScript || '';
+  const sc = state.syncConfig || {};
+  $('sOwner').value = s.syncOwner || '';
+  $('sOwner').placeholder = sc.owner || (state.auth && state.auth.user) || 'signed-in account';
+  $('sSkip').value = (sc.excluded || []).join('\n');
+  $('sPar').value = sc.parallel || 8;
   $('sRoot').value = s.projectsRoot || '';
   $('sMax').value = s.maxFileMB;
   $('sCustom').value = (s.customExclusions || []).join('\n');
-  $('sSyncState').textContent = state.syncScriptFound ? 'Script found.' : 'Script not found at this location.';
   const box = $('sDefaults');
   box.replaceChildren(...state.defaults.map(d => {
     const cb = h('input', { type: 'checkbox', 'data-id': d.id });
@@ -527,13 +576,12 @@ function renderSettings() {
     return h('label', { title: d.why }, cb, h('span', {}, d.glob), h('small', {}, d.why));
   }));
 }
-$('sSyncBrowse').addEventListener('click', async () => { const [f] = await pick('files', '', 'Select Sync-GitHubProjects.ps1'); if (f) $('sSync').value = f; });
 $('sRootBrowse').addEventListener('click', async () => { const [d] = await pick('folder', $('sRoot').value, 'Select your GitHub Projects folder'); if (d) $('sRoot').value = d; });
 $('sSave').addEventListener('click', async () => {
   const disabled = [...document.querySelectorAll('#sDefaults input')].filter(c => !c.checked && !c.disabled).map(c => c.dataset.id);
   try {
     await api('PUT', '/api/settings', {
-      syncScript: $('sSync').value, projectsRoot: $('sRoot').value, maxFileMB: Number($('sMax').value),
+      syncOwner: $('sOwner').value, syncExcluded: $('sSkip').value.split('\n').map(x => x.trim()).filter(Boolean), syncParallel: Number($('sPar').value) || 8, projectsRoot: $('sRoot').value, maxFileMB: Number($('sMax').value),
       customExclusions: $('sCustom').value.split('\n'), disabledDefaults: disabled
     });
     await loadState();
@@ -578,7 +626,7 @@ async function autoFixAfterFailure(meta) {
 
 function onJobFinished(meta) {
   if (meta.type === 'play' && meta.status === 'error' && meta.projectId) autoFixAfterFailure(meta);
-  if (meta.type === 'clone' || meta.type === 'pull') loadState();
+  if (meta.type === 'clone' || meta.type === 'pull' || meta.type === 'sync') loadState();
   if (meta.type === 'login') { api('GET', '/api/auth').then(a => { state.auth = a; renderAuth(); }); }
   if (meta.type === 'upload') schedulePreview();
 }

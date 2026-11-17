@@ -18,6 +18,7 @@
     <button id="syncBtn" class="btn primary big">Update Local GitHub</button>
   </div>
 </header>
+<div id="syncBar" class="syncbar hidden"></div>
 
 <main class="layout">
   <section class="main-col">
@@ -86,13 +87,18 @@
     </div>
 
     <div class="panel hidden" id="panel-settings">
-      <div class="field"><span>Sync script</span>
-        <div class="row"><input id="sSync" type="text" autocomplete="off"><button id="sSyncBrowse" class="btn">Browse…</button></div>
-        <small id="sSyncState" class="hint"></small>
-      </div>
       <div class="field"><span>Projects folder</span>
         <div class="row"><input id="sRoot" type="text" autocomplete="off"><button id="sRootBrowse" class="btn">Browse…</button></div>
       </div>
+      <label class="field"><span>GitHub account to update <em>(leave blank to use the account you are signed in with)</em></span>
+        <input id="sOwner" type="text" autocomplete="off" spellcheck="false" placeholder="signed-in account" style="max-width:260px">
+      </label>
+      <label class="field"><span>Never download or update these repositories <em>(one name per line)</em></span>
+        <textarea id="sSkip" rows="3" spellcheck="false"></textarea>
+      </label>
+      <label class="field"><span>Projects to update at the same time (1&ndash;16)</span>
+        <input id="sPar" type="number" min="1" max="16" style="max-width:120px">
+      </label>
       <label class="field"><span>Skip files larger than (MB, max 100)</span>
         <input id="sMax" type="number" min="1" max="100" style="max-width:120px">
       </label>

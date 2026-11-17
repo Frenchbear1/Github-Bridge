@@ -82,6 +82,20 @@ function validSettings(b) {
   const out = {};
   if (b.projectsRoot !== undefined) out.projectsRoot = String(b.projectsRoot).trim();
   if (b.syncScript !== undefined) out.syncScript = String(b.syncScript).trim();
+  if (b.syncOwner !== undefined) {
+    const o = String(b.syncOwner).trim();
+    if (o && !/^[A-Za-z0-9-]+$/.test(o)) throw new HttpError(400, 'GitHub account names use letters, numbers and dashes only.');
+    out.syncOwner = o;
+  }
+  if (b.syncExcluded !== undefined) {
+    if (!Array.isArray(b.syncExcluded)) throw new HttpError(400, 'syncExcluded must be a list.');
+    out.syncExcluded = b.syncExcluded.map(x => String(x).trim()).filter(Boolean).slice(0, 500);
+  }
+  if (b.syncParallel !== undefined) {
+    const n = Number(b.syncParallel);
+    if (!Number.isInteger(n) || n < 1 || n > 16) throw new HttpError(400, 'Projects at a time must be between 1 and 16.');
+    out.syncParallel = n;
+  }
   if (b.maxFileMB !== undefined) {
     const n = Number(b.maxFileMB);
     if (!Number.isFinite(n) || n < 1 || n > 100) throw new HttpError(400, 'Max file size must be between 1 and 100 MB.');
@@ -111,7 +125,8 @@ const routes = {
       projects: store.getProjects().map(p => { const exists = fs.existsSync(p.localPath); return { ...p, exists, modified: exists ? newestChange(p.localPath) : 0 }; }),
       auth: a,
       git: { found: g.code === 0, version: g.out },
-      syncScriptFound: !!settings.syncScript && fs.existsSync(settings.syncScript),
+      syncConfig: (() => { const c = sync.loadConfig(); return { owner: c.owner, excluded: c.excludedList, parallel: c.parallel }; })(),
+      lastSync: store.read('sync-last.json', null),
       syncRunning: !!jobs.runningOfType('sync')
     };
   },

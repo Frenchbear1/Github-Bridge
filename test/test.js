@@ -96,7 +96,7 @@ before(async () => {
   sh(path.join(tmp, 'seed'), 'push', remote, 'main');
 
   server = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-    env: { ...process.env, ...gitEnv, PORT: String(PORT), STREAMLINE_DATA: dataDir, STREAMLINE_ALLOW_ANY_REMOTE: '1', STREAMLINE_SYNC_RUNNER: 'sh', HOME: tmp },
+    env: { ...process.env, ...gitEnv, PORT: String(PORT), STREAMLINE_DATA: dataDir, STREAMLINE_ALLOW_ANY_REMOTE: '1', HOME: tmp },
     stdio: 'pipe'
   });
   for (let i = 0; i < 50; i++) {
@@ -235,70 +235,6 @@ test('add existing folder and import-from-folder', async () => {
   assert.equal(r.body.added, 2);
   const one = await call('POST', '/api/projects', { localPath: path.join(root, 'plain') });
   assert.equal(one.status, 400);
-});
-
-/* ---------- sync runner: exit codes 0 / 1 / 2 must map exactly like the .bat ---------- */
-async function runSync(exitCode) {
-  const dir = path.join(tmp, 'sync' + exitCode, '.github-sync');
-  fs.mkdirSync(dir, { recursive: true });
-  const script = path.join(dir, 'Sync-GitHubProjects.ps1');
-  fs.writeFileSync(script, `echo "UPDATED     o/repo"\necho "Finished in 1 seconds. Updated: 1 | Downloaded: 0 | Errors: 0"\nexit ${exitCode}\n`);
-  fs.writeFileSync(path.join(dir, 'last-run.json'), '﻿' + JSON.stringify({ Repositories: 56, Seconds: 9.9, Errors: 0, Paused: 0 }));
-  const put = await call('PUT', '/api/settings', { syncScript: script });
-  assert.equal(put.status, 200);
-  const r = await call('POST', '/api/sync', {});
-  assert.equal(r.status, 200, JSON.stringify(r.body));
-  const job = await waitJob(r.body.jobId);
-  const lines = (await call('GET', `/api/jobs/${job.id}/lines`)).body.lines.map(l => l.text);
-  return { job, lines };
-}
-
-test('sync exit code 0 = success with live output', async () => {
-  const { job, lines } = await runSync(0);
-  assert.equal(job.status, 'success');
-  assert.equal(job.exitCode, 0);
-  assert.ok(lines.includes('UPDATED     o/repo'));
-  assert.match(job.summary, /56 projects/);
-});
-
-test('sync exit code 1 = finished with errors', async () => {
-  const { job } = await runSync(1);
-  assert.equal(job.status, 'warning');
-  assert.equal(job.exitCode, 1);
-  assert.equal(job.summary, 'Some checks could not finish. See "Sync status.txt" and try again later.');
-});
-
-test('sync exit code 2 = already running', async () => {
-  const { job } = await runSync(2);
-  assert.equal(job.status, 'warning');
-  assert.equal(job.exitCode, 2);
-  assert.equal(job.summary, 'Another refresh is already running. Wait for it to finish before trying again.');
-});
-
-test('sync any other exit code = error', async () => {
-  const { job } = await runSync(5);
-  assert.equal(job.status, 'error');
-  assert.equal(job.exitCode, 5);
-});
-
-test('second sync while one runs is refused', async () => {
-  const dir = path.join(tmp, 'slow', '.github-sync');
-  fs.mkdirSync(dir, { recursive: true });
-  const script = path.join(dir, 'Sync-GitHubProjects.ps1');
-  fs.writeFileSync(script, 'sleep 1\nexit 0\n');
-  await call('PUT', '/api/settings', { syncScript: script });
-  const a = await call('POST', '/api/sync', {});
-  const b = await call('POST', '/api/sync', {});
-  assert.equal(a.status, 200);
-  assert.equal(b.status, 409);
-  await waitJob(a.body.jobId);
-});
-
-test('sync with a missing script gives a helpful error', async () => {
-  await call('PUT', '/api/settings', { syncScript: path.join(tmp, 'nope.ps1') });
-  const r = await call('POST', '/api/sync', {});
-  assert.equal(r.status, 400);
-  assert.match(r.body.error, /Sync script not found/);
 });
 
 test('closing the last browser tab stops the server; a quick reload keeps it alive', async () => {

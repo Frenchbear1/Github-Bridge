@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "open": "node server.js --open",
-    "test": "node --test test/test.js test/play.test.js test/custom.test.js test/health.test.js test/editors.test.js"
+    "test": "node --test test/test.js test/play.test.js test/custom.test.js test/health.test.js test/editors.test.js test/sync.test.js"
   },
   "engines": { "node": ">=18" },
   "license": "MIT"

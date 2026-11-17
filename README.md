@@ -6,7 +6,7 @@ A simple, local GitHub project manager for Windows. A tiny Node.js server runs o
 - **Clone** any public or private GitHub repository into any folder
 - **Upload** files or whole folders to a saved repository: preview, then commit and push in one click
 - **Smart exclusions**: `.git`, `node_modules`, build folders, caches, logs, secrets (`.env`, `*.pem`, `*.key`) and files over 95 MB are skipped automatically; add your own patterns in Settings
-- **Update Local GitHub**: runs your existing `.github-sync\Sync-GitHubProjects.ps1` silently (no Command Prompt) and shows live output
+- **Update Local GitHub**: built in (no script needed). Finds your repositories through your GitHub sign-in, shows a live progress bar, and ends with a clear list of what was updated, downloaded or paused
 - **Play** any saved project with one click: Streamline works out how it runs (see below)
 - **Remember** your projects and where they live
 - Show every clone, upload and update in an **Activity** panel with progress, errors and results
@@ -48,8 +48,8 @@ Windows may show a "Windows protected your PC" (SmartScreen) notice because the 
 
 ## First-time setup (2 minutes)
 
-1. Open the **Settings** tab. Streamline looks for your `GitHub Projects` folder and `.github-sync\Sync-GitHubProjects.ps1` automatically; check that both paths are right and save. (If you move the folder later, change it here.)
-2. Click **Sign in to GitHub** (top right) if it is shown. Your browser opens, you enter the one-time code that appears in the Activity panel, and you are done. If you are already signed in (the sync script's "existing Windows GitHub sign-in"), nothing is needed.
+1. Open the **Settings** tab. Streamline looks for your `GitHub Projects` folder automatically; check the path is right and save. (If you move the folder later, change it here.)
+2. Click **Sign in to GitHub** (top right) if it is shown. Your browser opens, you enter the one-time code that appears in the Activity panel, and you are done. If you are already signed in with the GitHub CLI, nothing is needed.
 3. In **Projects**, click **Import from projects folder** to save every repository that is already in your GitHub Projects folder.
 
 ## Using it
@@ -96,16 +96,18 @@ Once a program is up, Activity marks the run as a **success: running in the back
 - For a single project, use **Set up Play...** (or **Change...**) on its row for the same flow with just that project.
 - **A pasted reply is treated as untrusted.** Only well-known programs run (npm, node, python, dotnet, cargo, go, and similar), one plain command per step, no shell operators or quotes, every path must stay inside the project, no downloads, and you see the exact commands before anything is saved.
 
-### Update Local GitHub: exit codes
+### Update Local GitHub
 
-The script is run exactly as `1 - Refresh GitHub Projects.bat` runs it (`powershell -NoProfile -ExecutionPolicy Bypass -File ...`), just without a window, and it is never modified.
+One click. Streamline signs in with the GitHub CLI login it already uses, lists your repositories, asks GitHub (in one bulk request) for the latest commit of each, and only touches projects that are out of date:
 
-| Exit code | Shown as |
-| --- | --- |
-| `0` | Success: "Finished. GitHub Projects are up to date" with the project count from `last-run.json` |
-| `1` | Warning: "Some checks could not finish. See "Sync status.txt" and try again later." |
-| `2` | Warning: "Another refresh is already running. Wait for it to finish before trying again." |
-| anything else | Error: "Refresh could not finish. See the output above." |
+- **Up to date**: counted, never opened or scanned.
+- **Behind**: fast-forwarded to match GitHub.
+- **New on GitHub**: downloaded into your projects folder (and saved in Streamline). A download is only published once it is complete.
+- **Paused**: left exactly as they are when you have local edits, untracked files, local commits, a different branch checked out, or a Git operation in progress. The reason is listed next to the project.
+
+It never pushes, commits, stashes, resets, cleans or deletes anything. A status bar shows progress while it runs (with Cancel), and the result stays on screen until you dismiss it; the Activity panel keeps the full output. If GitHub's repository list cannot be reached, the last known list is used and you are told.
+
+Settings has the options the old script's `config.json` had: which GitHub account to update (blank = the one you are signed in with), repositories to skip, and how many projects to update at once (default 8). If you have an old `.github-sync\config.json`, it is read as the starting point. The old script and `.bat` are no longer used by Streamline and are left alone.
 
 ### How uploads work
 
