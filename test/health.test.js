@@ -125,3 +125,11 @@ test('ignored failures leave the counts and the ChatGPT prompt, and can be resto
   assert.doesNotMatch((await health.fixPrompt()).prompt, /PROJECT: Mystery/);
   assert.equal(health.setIgnored(mystery, false).counts.fail, before);
 });
+
+test('saving a custom setup clears the stale failed result so Play comes back', async () => {
+  await waitJob(health.startCheck());
+  const id = by('Mystery').id;
+  assert.equal(health.status().results[id].status, 'fail');
+  health.forget(id);
+  assert.equal(health.status().results[id], undefined);
+});

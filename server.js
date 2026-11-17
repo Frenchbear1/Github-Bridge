@@ -208,11 +208,12 @@ async function handleApi(req, res, url) {
     const v = custom.validate(project, String(body.reply || ''));
     if (!v.ok) return send(res, 200, { ok: false, errors: v.errors, warnings: v.warnings, cannotRun: v.cannotRun || null, questions: v.questions || [] });
     const preview = launch.previewCustom(project, v.config);
-    if (m[2] === 'save') custom.save(project.id, v.config);
+    if (m[2] === 'save') { custom.save(project.id, v.config); health.forget(project.id); }
     return send(res, 200, { ok: true, saved: m[2] === 'save', warnings: v.warnings, config: v.config, ...preview });
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/custom$/)) && req.method === 'DELETE') {
     findProject(m[1]);
+    health.forget(m[1]);
     return send(res, 200, { removed: custom.remove(m[1]) });
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/play$/)) && req.method === 'POST') {
