@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streamline</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M8 12h12M8 16h16M8 20h9' stroke='white' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M8 12h12M8 16h16M8 20h9" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>
+    <span>Streamline</span>
+  </div>
+  <div class="top-right">
+    <div id="auth"></div>
+    <button id="syncBtn" class="btn primary big">Update Local GitHub</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="main-col">
+    <nav class="tabs" id="tabs">
+      <button data-tab="projects" class="active">Projects</button>
+      <button data-tab="upload">Upload</button>
+      <button data-tab="clone">Clone</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+
+    <div class="panel" id="panel-projects">
+      <div class="toolbar">
+        <input id="projSearch" type="search" placeholder="Search projects…" autocomplete="off">
+        <button id="addFolderBtn" class="btn">Add existing folder…</button>
+        <button id="scanBtn" class="btn">Import from projects folder</button>
+      </div>
+      <div id="projMsg" class="notice hidden"></div>
+      <div id="projList" class="list"></div>
+    </div>
+
+    <div class="panel hidden" id="panel-upload">
+      <label class="field"><span>Repository</span>
+        <select id="upRepo"></select>
+      </label>
+      <div class="field"><span>Files &amp; folders to upload</span>
+        <div class="row">
+          <button id="addFilesBtn" class="btn">Add files…</button>
+          <button id="addDirBtn" class="btn">Add folder…</button>
+          <input id="upPath" type="text" placeholder="…or paste a full path and press Enter" autocomplete="off">
+        </div>
+        <div id="upItems" class="chips"></div>
+      </div>
+      <label class="field"><span>Put them in this folder of the repo <em>(optional)</em></span>
+        <input id="upSub" type="text" placeholder="e.g. docs/images — leave empty for the top level" autocomplete="off">
+      </label>
+      <div id="upNotice" class="notice hidden"></div>
+      <div id="upPreview" class="preview hidden"></div>
+      <div class="row end">
+        <input id="upMsg" type="text" placeholder="Commit message (optional)" autocomplete="off">
+        <button id="upBtn" class="btn primary big" disabled>Upload to GitHub</button>
+      </div>
+    </div>
+
+    <div class="panel hidden" id="panel-clone">
+      <label class="field"><span>GitHub repository URL</span>
+        <input id="clUrl" type="text" placeholder="https://github.com/owner/repo" autocomplete="off">
+      </label>
+      <div class="field"><span>Clone into folder</span>
+        <div class="row">
+          <input id="clParent" type="text" autocomplete="off">
+          <button id="clBrowse" class="btn">Browse…</button>
+        </div>
+        <small id="clDest" class="hint"></small>
+      </div>
+      <div id="clNotice" class="notice hidden"></div>
+      <div class="row end"><button id="clBtn" class="btn primary big">Clone</button></div>
+      <p class="hint">Private repositories work when you are signed in to GitHub (top right).</p>
+    </div>
+
+    <div class="panel hidden" id="panel-settings">
+      <div class="field"><span>Sync script</span>
+        <div class="row"><input id="sSync" type="text" autocomplete="off"><button id="sSyncBrowse" class="btn">Browse…</button></div>
+        <small id="sSyncState" class="hint"></small>
+      </div>
+      <div class="field"><span>Projects folder</span>
+        <div class="row"><input id="sRoot" type="text" autocomplete="off"><button id="sRootBrowse" class="btn">Browse…</button></div>
+      </div>
+      <label class="field"><span>Skip files larger than (MB, max 100)</span>
+        <input id="sMax" type="number" min="1" max="100" style="max-width:120px">
+      </label>
+      <label class="field"><span>Custom exclusions <em>(one per line, e.g. <code>*.psd</code>, <code>secrets/</code>, <code>docs/drafts</code>)</em></span>
+        <textarea id="sCustom" rows="4" spellcheck="false"></textarea>
+      </label>
+      <div class="field"><span>Smart exclusions <em>(untick to include that kind of file)</em></span>
+        <div id="sDefaults" class="defaults"></div>
+      </div>
+      <div id="sNotice" class="notice hidden"></div>
+      <div class="row end"><button id="sSave" class="btn primary">Save settings</button></div>
+    </div>
+  </section>
+
+  <aside class="activity">
+    <div class="act-head"><h2>Activity</h2><button id="clearBtn" class="btn small ghost">Clear</button></div>
+    <div id="jobs"></div>
+  </aside>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
