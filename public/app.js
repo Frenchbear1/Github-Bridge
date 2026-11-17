@@ -66,6 +66,7 @@ async function loadState() {
   Object.assign(state, s);
   try { state.plans = (await api('GET', '/api/play')).plans; } catch { state.plans = {}; }
   try { state.health = await api('GET', '/api/health'); } catch { state.health = { results: {}, counts: {}, at: null }; }
+  try { state.links = await api('GET', '/api/links'); } catch { state.links = { byId: {}, targets: {} }; }
   renderAuth(); renderHealth(); renderProjects(); renderUploadRepos(); renderSettings(); renderClone(); renderSyncBtn();
 }
 
@@ -225,9 +226,42 @@ if (!$('projSort').value) $('projSort').value = 'changed';
 $('projSort').addEventListener('change', () => { try { localStorage.setItem('sl.sort', $('projSort').value); } catch { /* ignore */ } renderProjects(); });
 
 // the ⋯ menu closes when you pick something or click elsewhere
-document.addEventListener('click', e => { const m = $('projMenu'); if (m.open && (!m.contains(e.target) || e.target.closest('.menu-pop button'))) m.open = false; });
+document.addEventListener('click', e => { for (const d of document.querySelectorAll('details.playmenu[open]')) if (!d.contains(e.target)) d.open = false; const m = $('projMenu'); if (m.open && (!m.contains(e.target) || e.target.closest('.menu-pop button'))) m.open = false; });
 
 const openProblems = new Set();
+
+const host = u => { try { return new URL(u).host + new URL(u).pathname.replace(/\/$/, ''); } catch { return u; } };
+function latestRel(L) { const r = (L && L.releases) || []; return r.find(x => !x.pre) || r[0] || null; }
+
+// Everything Play can do for a project: run it here, or use what it has on GitHub.
+function playOptions(p, plan, hr) {
+  const L = (state.links && state.links.byId || {})[p.id];
+  const out = [];
+  if (plan && plan.canPlay && !(hr && hr.status === 'fail')) out.push({ key: 'local', label: '\u25B6 Run on this computer', sub: plan.detail || plan.label, short: 'Run on this computer', title: `${plan.label}: ${plan.detail}` });
+  if (L && L.homepage) out.push({ key: 'homepage', label: '\u{1F310} Open website', sub: host(L.homepage), short: 'Website', title: L.homepage });
+  if (L && L.pages && L.pages.replace(/\/$/, '') !== (L.homepage || '').replace(/\/$/, '')) out.push({ key: 'pages', label: '\u{1F310} Open GitHub Pages', sub: host(L.pages), short: 'Pages', title: L.pages });
+  const rel = latestRel(L);
+  if (rel) {
+    const runnable = (rel.assets || []).some(a => /\.(exe|msi|zip)$/i.test(a.name) && !/(arm64|mac|darwin|linux|blockmap)/i.test(a.name));
+    if (runnable) out.push({ key: 'release', label: `\u2B07 Run latest release`, sub: `${rel.tag}: downloads and runs it`, short: `Release ${rel.tag}`, title: rel.name });
+    out.push({ key: 'release-page', label: '\u{1F4E6} Open release page', sub: rel.tag, short: 'Release page' });
+  }
+  return out;
+}
+
+function onlineLinks(p) {
+  const L = (state.links && state.links.byId || {})[p.id];
+  if (!L) return null;
+  const a = (href, text, title) => h('a', { href, target: '_blank', rel: 'noopener', title: title || href }, text);
+  const rel = latestRel(L);
+  const bits = [
+    L.homepage ? a(L.homepage, '\u{1F310} ' + host(L.homepage)) : null,
+    L.pages && L.pages.replace(/\/$/, '') !== (L.homepage || '').replace(/\/$/, '') ? a(L.pages, 'Pages') : null,
+    rel ? a(rel.url, `\u{1F4E6} ${rel.tag}`, `${rel.name}${rel.assets.length ? ' \u2014 ' + rel.assets.map(x => x.name).join(', ') : ''}`) : null,
+    L.releaseCount > 1 ? a(L.releasesUrl, `${L.releaseCount} releases`) : null
+  ].filter(Boolean);
+  return bits.length ? h('div', { class: 'online' }, ...bits) : null;
+}
 
 function renderProjects() {
   const q = $('projSearch').value.trim().toLowerCase();
@@ -253,10 +287,26 @@ function renderProjects() {
     let playBtn = null;
     if (run) {
       playBtn = h('button', { class: 'btn small danger-fill', title: 'Stop this project', onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, '\u25A0 Stop');
-    } else if (plan && plan.canPlay && !(hr && hr.status === 'fail')) {
-      playBtn = h('span', { class: 'btnpair' },
-        h('button', { class: 'btn small play', title: `${plan.label}: ${plan.detail}`, onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/play`)).jobId); } catch (e) { alert(e.message); } } }, '\u25B6 Play'),
-        plan.stopFile ? h('button', { class: 'btn small ghost', title: `Runs ${plan.stopFile}`, onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, 'Stop') : null);
+    } else {
+      const opts = playOptions(p, plan, hr);
+      const target = (state.links && state.links.targets || {})[p.id] || 'local';
+      const eff = opts.find(o => o.key === target) || opts.find(o => o.key === 'local') || opts[0];
+      if (eff) {
+        const go = async via => { try { focusJob((await api('POST', `/api/projects/${p.id}/play`, { via })).jobId); } catch (e) { alert(e.message); } };
+        const menu = opts.length > 1 ? h('details', { class: 'menu playmenu' },
+          h('summary', { class: 'btn small play caret', title: 'Other ways to play' }, '\u25BE'),
+          h('div', { class: 'menu-pop right' },
+            ...opts.map(o => h('button', { class: 'btn ghost', title: o.title || '', onclick: e => { e.target.closest('details').open = false; go(o.key); } }, o.label, o.sub ? h('span', { class: 'sub' }, o.sub) : null)),
+            h('div', { class: 'menu-sep' }, 'Play button does'),
+            ...opts.filter(o => o.key !== 'release-page').map(o => h('button', { class: 'btn ghost choose' + (o.key === eff.key ? ' on' : ''), onclick: async e => {
+              e.target.closest('details').open = false;
+              try { state.links.targets = (await api('POST', `/api/projects/${p.id}/play-target`, { target: o.key })).targets; renderProjects(); } catch (err) { alert(err.message); }
+            } }, (o.key === eff.key ? '\u2713 ' : '') + o.short)))) : null;
+        playBtn = h('span', { class: 'btnpair' },
+          h('button', { class: 'btn small play' + (menu ? ' joined' : ''), title: eff.title || eff.label, onclick: () => go(eff.key) }, eff.key === 'local' ? '\u25B6 Play' : '\u25B6 ' + eff.short),
+          menu,
+          plan && plan.stopFile && eff.key === 'local' ? h('button', { class: 'btn small ghost', title: `Runs ${plan.stopFile}`, onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, 'Stop') : null);
+      }
     }
     const open = openProblems.has(p.id);
     const hTag = hr && !run ? h('span', { class: 'tag ' + (hr.ignored ? 'ignored' : hr.status), title: hr.note || hr.problem || '', onclick: () => { if (hr.status === 'fail' || hr.status === 'warn') { open ? openProblems.delete(p.id) : openProblems.add(p.id); renderProjects(); } } },
@@ -272,6 +322,7 @@ function renderProjects() {
       h('div', { class: 'grow' },
         h('div', { class: 'name' }, p.name, h('span', { class: 'tag' }, p.branch), p.exists ? null : h('span', { class: 'tag bad' }, 'folder missing'), run ? h('span', { class: 'tag live' }, 'running') : null, plan && plan.source === 'custom' ? h('span', { class: 'tag custom' }, 'custom') : null, hTag),
         plan && plan.canPlay ? h('div', { class: 'how', title: (plan.notes || []).join(' ') }, how, h('button', { class: 'linkish', title: 'Not right? Set it up differently', onclick: () => openPlayDialog(p) }, 'Change\u2026')) : null,
+        onlineLinks(p),
         h('div', { class: 'path', title: p.localPath }, p.localPath)),
       h('div', { class: 'actions' },
         // row 1: run it and look at it. row 2: sync with GitHub, then remove
@@ -743,6 +794,7 @@ function connectEvents() {
     if (j.lines.length > 400) j.lines.shift();
     if (j.open) renderJobs();
   });
+  es.addEventListener('links', async () => { try { state.links = await api('GET', '/api/links'); renderProjects(); } catch { /* keep old */ } });
   es.addEventListener('cleared', () => { for (const [id, j] of jobs) if (j.meta.status !== 'running') jobs.delete(id); renderJobs(); });
   es.onerror = () => { /* the browser reconnects automatically */ };
 }

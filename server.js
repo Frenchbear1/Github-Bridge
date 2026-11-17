@@ -10,6 +10,7 @@ const clone = require('./lib/clone');
 const upload = require('./lib/upload');
 const sync = require('./lib/sync');
 const syncfix = require('./lib/syncfix');
+const links = require('./lib/links');
 const auth = require('./lib/auth');
 const picker = require('./lib/picker');
 const launch = require('./lib/launch');
@@ -115,6 +116,7 @@ function validSettings(b) {
 }
 
 const routes = {
+  'GET /api/links': async ({ url }) => links.status(url && url.searchParams && url.searchParams.get('refresh') === '1'),
   'GET /api/ping': async () => ({ app: 'streamline', version: pkg.version }),
   'GET /api/state': async () => {
     const settings = store.getSettings();
@@ -250,7 +252,15 @@ async function handleApi(req, res, url) {
     return send(res, 200, { removed: custom.remove(m[1]) });
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/play$/)) && req.method === 'POST') {
-    return send(res, 200, { jobId: launch.start(findProject(m[1])) });
+    const project = findProject(m[1]);
+    const via = String(body.via || links.targetOf(project.id));
+    if (via === 'local') return send(res, 200, { jobId: launch.start(project) });
+    if (!['homepage', 'pages', 'release', 'release-page'].includes(via)) throw new HttpError(400, 'Unknown Play choice.');
+    return send(res, 200, { jobId: links.play(project, via, launch) });
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/play-target$/)) && req.method === 'POST') {
+    findProject(m[1]);
+    return send(res, 200, { targets: links.setTarget(m[1], String(body.target || 'local')) });
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/stop$/)) && req.method === 'POST') {
     return send(res, 200, { stopped: launch.stop(findProject(m[1])) });
@@ -305,9 +315,10 @@ function handleEvents(req, res) {
   const onJob = j => res.write(`event: job\ndata: ${JSON.stringify(j)}\n\n`);
   const onLine = l => res.write(`event: line\ndata: ${JSON.stringify(l)}\n\n`);
   const onCleared = () => res.write('event: cleared\ndata: {}\n\n');
-  jobs.bus.on('job', onJob); jobs.bus.on('line', onLine); jobs.bus.on('cleared', onCleared);
+  const onLinks = d => res.write(`event: links\ndata: ${JSON.stringify(d)}\n\n`);
+  jobs.bus.on('job', onJob); jobs.bus.on('line', onLine); jobs.bus.on('cleared', onCleared); jobs.bus.on('links', onLinks);
   const ping = setInterval(() => res.write(': ping\n\n'), 25000);
-  req.on('close', () => { streams.delete(res); clearInterval(ping); jobs.bus.off('job', onJob); jobs.bus.off('line', onLine); jobs.bus.off('cleared', onCleared); });
+  req.on('close', () => { streams.delete(res); clearInterval(ping); jobs.bus.off('job', onJob); jobs.bus.off('line', onLine); jobs.bus.off('cleared', onCleared); jobs.bus.off('links', onLinks); });
 }
 
 function serveStatic(req, res, url) {

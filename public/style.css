@@ -239,3 +239,19 @@ dialog.small { width: min(380px, 92vw); }
 .sb-file .kind.k-new, .sb-file .kind.k-added { color: var(--accent); } .sb-file .kind.k-deleted, .sb-file .kind.k-conflict { color: var(--err); }
 .btn.danger { color: var(--err); } .btn.danger:hover:not(:disabled) { border-color: var(--err); color: var(--err); }
 .toast { position: fixed; right: 20px; bottom: 20px; max-width: 460px; white-space: pre-line; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 10px; padding: 10px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.18); font-size: 13px; z-index: 50; }
+
+/* ---------- online links + play menu ---------- */
+.item .online { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; margin-top: 2px; }
+.item .online a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.item .online a:hover { text-decoration: underline; }
+.btn.play.joined { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.playmenu > summary.caret { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; padding-left: 7px; padding-right: 7px; list-style: none; }
+.playmenu > summary::-webkit-details-marker { display: none; }
+.playmenu { position: relative; }
+.menu-pop.right { right: 0; left: auto; min-width: 250px; }
+.menu-pop .btn .sub { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; }
+.menu-sep { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); padding: 8px 10px 2px; border-top: 1px solid var(--line); margin-top: 4px; }
+.menu-pop .btn.choose { font-size: 12.5px; padding-top: 4px; padding-bottom: 4px; }
+.menu-pop .btn.choose.on { color: var(--accent); font-weight: 650; }
+.btnpair { display: inline-flex; align-items: center; gap: 0; }
+.btnpair > .btn.ghost { margin-left: 6px; }

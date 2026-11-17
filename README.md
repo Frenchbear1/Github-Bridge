@@ -8,6 +8,7 @@ A simple, local GitHub project manager for Windows. A tiny Node.js server runs o
 - **Smart exclusions**: `.git`, `node_modules`, build folders, caches, logs, secrets (`.env`, `*.pem`, `*.key`) and files over 95 MB are skipped automatically; add your own patterns in Settings
 - **Update Local GitHub**: built in (no script needed). Finds your repositories through your GitHub sign-in, shows a live progress bar, and ends with a clear list of what was updated, downloaded or paused
 - **Play** any saved project with one click: Streamline works out how it runs (see below)
+- **Online links**: each project shows the website set on its GitHub repository, its GitHub Pages address and its latest release. The ▾ next to Play can open the site or Pages, or download and run the latest release, and "Play button does" picks which one Play uses
 - **Remember** your projects and where they live
 - Show every clone, upload and update in an **Activity** panel with progress, errors and results
 
@@ -105,7 +106,7 @@ One click. Streamline signs in with the GitHub CLI login it already uses, lists 
 - **New on GitHub**: downloaded into your projects folder (and saved in Streamline). A download is only published once it is complete.
 - **Paused**: left exactly as they are when you have local edits, untracked files, local commits, a different branch checked out, or a Git operation in progress. The reason is listed next to the project.
 
-It never pushes, commits, stashes, resets, cleans or deletes anything. A status bar shows progress while it runs (with Cancel), and the result stays on screen until you dismiss it; the Activity panel keeps the full output. If GitHub's repository list cannot be reached, the last known list is used and you are told.
+It never pushes, commits, stashes, resets, cleans or deletes anything on its own. When a project is paused, the results list the exact files (or local commits, or the branch) in the way. Each file can be **moved out** to `_Set aside\<project>` in your projects folder, or **deleted** (Recycle Bin), and edited files go back to the GitHub version. The project is then checked again right away. A status bar shows progress while it runs (with Cancel), and the result stays on screen until you dismiss it; the Activity panel keeps the full output. If GitHub's repository list cannot be reached, the last known list is used and you are told.
 
 Settings has the options the old script's `config.json` had: which GitHub account to update (blank = the one you are signed in with), repositories to skip, and how many projects to update at once (default 8). If you have an old `.github-sync\config.json`, it is read as the starting point. The old script and `.bat` are no longer used by Streamline and are left alone.
 

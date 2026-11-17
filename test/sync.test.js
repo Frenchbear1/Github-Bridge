@@ -242,3 +242,37 @@ test('programs Streamline starts never inherit its PORT or private settings', ()
   assert.equal(Object.keys(env).some(k => /^STREAMLINE_/.test(k)), false);
   assert.equal(env.X, '1');
 });
+
+/* ---------- website, Pages and releases ---------- */
+test('GitHub links and releases are loaded, and Play can be routed to them', async () => {
+  const links = require('../lib/links');
+  const launch = require('../lib/launch');
+  fs.writeFileSync(path.join(tmp, 'repos.json'), JSON.stringify([
+    { name: 'alpha', homepage: 'https://alpha.example.com', pages: 'https://tester.github.io/alpha/', releases: [{ tag: 'v2.0', assets: ['alpha-mac.dmg', 'Alpha.AppImage'] }] },
+    { name: 'beta' }
+  ]));
+  store.saveProjects([
+    { id: 'aaaaaaaaaa', name: 'alpha', url: 'https://github.com/tester/alpha.git', localPath: path.join(root, 'alpha'), branch: 'main' },
+    { id: 'bbbbbbbbbb', name: 'beta', url: 'https://github.com/tester/beta', localPath: path.join(root, 'beta'), branch: 'main' },
+    { id: 'cccccccccc', name: 'local-only', url: '', localPath: path.join(root, 'gamma'), branch: 'main' }
+  ]);
+  const st = await links.refresh();
+  assert.equal(st.byId.aaaaaaaaaa.homepage, 'https://alpha.example.com');
+  assert.equal(st.byId.aaaaaaaaaa.pages, 'https://tester.github.io/alpha/');
+  assert.equal(st.byId.aaaaaaaaaa.releases[0].tag, 'v2.0');
+  assert.equal(st.byId.bbbbbbbbbb.homepage, '');
+  assert.equal(st.byId.cccccccccc, undefined);
+  assert.equal(links.runnableAsset(st.byId.aaaaaaaaaa.releases[0]).name, 'Alpha.AppImage');
+
+  links.setTarget('aaaaaaaaaa', 'release');
+  assert.equal(links.targetOf('aaaaaaaaaa'), 'release');
+  assert.throws(() => links.setTarget('aaaaaaaaaa', 'evil'), /Unknown/);
+  const project = store.getProjects()[0];
+  const id = links.play(project, 'release', launch);
+  for (let i = 0; i < 100 && !fs.existsSync(path.join(tmp, 'RELEASE_RAN')); i++) await new Promise(r => setTimeout(r, 100));
+  assert.ok(fs.existsSync(path.join(tmp, 'RELEASE_RAN')), 'the release file was downloaded and run');
+  assert.equal(jobs.get(id).projectId, 'aaaaaaaaaa');
+  assert.throws(() => links.play(store.getProjects()[1], 'homepage', launch), /no website/);
+  links.setTarget('aaaaaaaaaa', 'local');
+  assert.equal(links.targetOf('aaaaaaaaaa'), 'local');
+});
