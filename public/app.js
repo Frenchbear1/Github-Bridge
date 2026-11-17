@@ -66,7 +66,7 @@ async function loadState() {
   Object.assign(state, s);
   try { state.plans = (await api('GET', '/api/play')).plans; } catch { state.plans = {}; }
   try { state.health = await api('GET', '/api/health'); } catch { state.health = { results: {}, counts: {}, at: null }; }
-  renderAuth(); renderHealth(); renderProjects(); renderUploadRepos(); renderSettings(); renderClone(); renderSyncBtn();
+  renderAuth(); renderHealth(); renderProjects(); renderUploadRepos(); renderSettings(); renderClone(); renderCreate(); renderSyncBtn();
 }
 
 function renderAuth() {
@@ -406,6 +406,45 @@ function repoNameFromUrl(u) {
   const m = u.trim().match(/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/);
   return m ? m[1] : '';
 }
+
+/* ---------- create a new repository ---------- */
+const crMode = () => document.querySelector('input[name="crMode"]:checked').value;
+function renderCreate() {
+  if (!$('crParent').value) $('crParent').value = (state.settings || {}).projectsRoot || '';
+  updateCreateUi();
+}
+function updateCreateUi() {
+  if ($('crNotice').classList.contains('err')) notice($('crNotice'), '');
+  const existing = crMode() === 'existing';
+  $('crParentBox').classList.toggle('hidden', existing);
+  $('crFolderBox').classList.toggle('hidden', !existing);
+  const name = $('crName').value.trim();
+  const bad = name && !/^[A-Za-z0-9._-]+$/.test(name);
+  $('crNameHint').textContent = bad ? 'Spaces and special characters are not allowed. Try dashes instead.' : 'Letters, numbers, dashes, dots and underscores. No spaces.';
+  $('crNameHint').style.color = bad ? 'var(--bad, #b42318)' : '';
+  const parent = $('crParent').value.replace(/[\\/]+$/, '');
+  $('crDest').textContent = !existing && name && parent && !bad ? `Will create: ${parent}${state.platform === 'win32' ? '\\' : '/'}${name}` : '';
+}
+for (const id of ['crName', 'crParent']) $(id).addEventListener('input', updateCreateUi);
+document.querySelectorAll('input[name="crMode"]').forEach(r => r.addEventListener('change', updateCreateUi));
+$('crBrowseParent').addEventListener('click', async () => { const [d] = await pick('folder', $('crParent').value, 'Create the new folder inside which folder?'); if (d) { $('crParent').value = d; updateCreateUi(); } });
+$('crBrowseFolder').addEventListener('click', async () => {
+  const [d] = await pick('folder', $('crFolder').value || (state.settings || {}).projectsRoot, 'Which folder should be uploaded?');
+  if (d) { $('crFolder').value = d; if (!$('crName').value.trim()) { $('crName').value = d.replace(/[\\/]+$/, '').split(/[\\/]/).pop().replace(/[^A-Za-z0-9._-]+/g, '-'); updateCreateUi(); } }
+});
+$('crBtn').addEventListener('click', async () => {
+  notice($('crNotice'), '');
+  try {
+    const r = await api('POST', '/api/create', {
+      name: $('crName').value, description: $('crDesc').value, owner: '',
+      visibility: document.querySelector('input[name="crVis"]:checked').value,
+      mode: crMode(), parent: $('crParent').value, folder: $('crFolder').value
+    });
+    notice($('crNotice'), 'Creating the repository. Progress is in Activity.', 'ok');
+    focusJob(r.jobId);
+  } catch (e) { notice($('crNotice'), e.message, 'err'); }
+});
+
 function renderClone() {
   if (!$('clParent').value) $('clParent').value = state.settings.projectsRoot || '';
   updateCloneDest();
@@ -572,7 +611,7 @@ async function autoFixAfterFailure(meta) {
 
 function onJobFinished(meta) {
   if (meta.type === 'play' && meta.status === 'error' && meta.projectId) autoFixAfterFailure(meta);
-  if (meta.type === 'clone' || meta.type === 'pull') loadState();
+  if (meta.type === 'clone' || meta.type === 'pull' || meta.type === 'create') loadState();
   if (meta.type === 'login') { api('GET', '/api/auth').then(a => { state.auth = a; renderAuth(); }); }
   if (meta.type === 'upload') schedulePreview();
 }
