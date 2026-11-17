@@ -2,7 +2,6 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
 
 const store = require('./lib/store');
 const jobs = require('./lib/jobs');
@@ -12,6 +11,8 @@ const upload = require('./lib/upload');
 const sync = require('./lib/sync');
 const auth = require('./lib/auth');
 const picker = require('./lib/picker');
+const launch = require('./lib/launch');
+const { openUrl, openFolderWindow } = require('./lib/open');
 const { DEFAULTS } = require('./lib/exclusions');
 const { gitExe, ghExe, run } = require('./lib/proc');
 const { IS_WIN } = require('./lib/util');
@@ -68,8 +69,7 @@ function findProject(id) {
 
 function openFolder(dir) {
   if (!fs.existsSync(dir)) throw new HttpError(404, 'Folder not found.');
-  if (IS_WIN) spawn('explorer.exe', [dir], { windowsHide: false, stdio: 'ignore', detached: true }).unref();
-  else spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [dir], { stdio: 'ignore', detached: true }).unref();
+  openFolderWindow(dir);
 }
 
 function validSettings(b) {
@@ -144,6 +144,23 @@ const routes = {
     return { jobId: upload.startUpload({ project, items: body.items, subfolder: body.subfolder, message: body.message }) };
   },
 
+  'GET /api/play': async () => {
+    const plans = {};
+    const running = {};
+    for (const p of store.getProjects()) {
+      plans[p.id] = launch.summary(launch.detect(p));
+      const j = launch.runningJob(p.id);
+      if (j) running[p.id] = j.id;
+    }
+    return { plans, running };
+  },
+
+  'POST /api/quit': async () => {
+    // Lets you stop the app from the browser (or Stop-Streamline.vbs) without any console window.
+    setTimeout(() => process.exit(0), 150);
+    return { ok: true };
+  },
+
   'POST /api/sync': async () => ({ jobId: sync.startSync() })
 };
 
@@ -158,6 +175,12 @@ async function handleApi(req, res, url) {
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/pull$/)) && req.method === 'POST') {
     return send(res, 200, { jobId: clone.startPull(findProject(m[1])) });
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/play$/)) && req.method === 'POST') {
+    return send(res, 200, { jobId: launch.start(findProject(m[1])) });
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/stop$/)) && req.method === 'POST') {
+    return send(res, 200, { stopped: launch.stop(findProject(m[1])) });
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/open$/)) && req.method === 'POST') {
     openFolder(findProject(m[1]).localPath);
@@ -217,11 +240,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-function openBrowser(port) {
-  const url = `http://localhost:${port}/`;
-  if (IS_WIN) spawn('rundll32', ['url.dll,FileProtocolHandler', url], { windowsHide: true, stdio: 'ignore', detached: true }).unref();
-  else spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { stdio: 'ignore', detached: true }).unref();
-}
+function openBrowser(port) { openUrl(`http://localhost:${port}/`); }
 
 server.on('error', e => {
   if (e.code === 'EADDRINUSE') {

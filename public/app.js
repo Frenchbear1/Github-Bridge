@@ -1,7 +1,7 @@
 'use strict';
 /* Streamline front end. All dynamic text is inserted with textContent (never innerHTML). */
 const $ = id => document.getElementById(id);
-const state = { settings: null, projects: [], defaults: [], auth: null, platform: '', syncScriptFound: false };
+const state = { settings: null, projects: [], defaults: [], auth: null, platform: '', syncScriptFound: false, plans: {} };
 const jobs = new Map();          // id -> { meta, lines, open, loaded }
 let items = [];                  // upload selection
 let lastPreview = null;
@@ -64,6 +64,7 @@ $('tabs').addEventListener('click', e => { const t = e.target.closest('button[da
 async function loadState() {
   const s = await api('GET', '/api/state');
   Object.assign(state, s);
+  try { state.plans = (await api('GET', '/api/play')).plans; } catch { state.plans = {}; }
   renderAuth(); renderProjects(); renderUploadRepos(); renderSettings(); renderClone(); renderSyncBtn();
 }
 
@@ -96,6 +97,10 @@ $('syncBtn').addEventListener('click', async () => {
 });
 
 /* ---------- projects ---------- */
+function playingJob(projectId) {
+  return [...jobs.values()].map(j => j.meta).find(m => m.type === 'play' && m.status === 'running' && m.projectId === projectId) || null;
+}
+
 function renderProjects() {
   const q = $('projSearch').value.trim().toLowerCase();
   const list = $('projList');
@@ -114,14 +119,30 @@ function renderProjects() {
       if (!confirming) { confirming = true; rm.textContent = 'Sure?'; setTimeout(() => { confirming = false; rm.textContent = 'Remove'; }, 3000); return; }
       await api('DELETE', '/api/projects/' + p.id); await loadState();
     });
+    const plan = state.plans[p.id];
+    const run = playingJob(p.id);
+    let playBtn;
+    if (run) {
+      playBtn = h('button', { class: 'btn small danger-fill', title: 'Stop this project', onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, '\u25A0 Stop');
+    } else if (plan && plan.canPlay) {
+      playBtn = h('span', { class: 'btnpair' },
+        h('button', { class: 'btn small play', title: `${plan.label}: ${plan.detail}`, onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/play`)).jobId); } catch (e) { alert(e.message); } } }, '\u25B6 Play'),
+        plan.stopFile ? h('button', { class: 'btn small ghost', title: `Runs ${plan.stopFile}`, onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, 'Stop') : null);
+    } else {
+      playBtn = h('span', { class: 'noplay', title: plan && plan.detail ? plan.detail : 'Nothing to run in this project' }, 'No run step');
+    }
+    const how = plan ? [plan.label, plan.detail].filter(Boolean).join(' \u00B7 ') : '';
     list.append(h('div', { class: 'item' },
       h('div', { class: 'grow' },
-        h('div', { class: 'name' }, p.name, h('span', { class: 'tag' }, p.branch), p.exists ? null : h('span', { class: 'tag bad' }, 'folder missing')),
+        h('div', { class: 'name' }, p.name, h('span', { class: 'tag' }, p.branch), p.exists ? null : h('span', { class: 'tag bad' }, 'folder missing'), run ? h('span', { class: 'tag live' }, 'running') : null),
+        plan && plan.canPlay ? h('div', { class: 'how', title: (plan.notes || []).join(' ') }, how) : null,
         h('div', { class: 'path', title: p.localPath }, p.localPath)),
       h('div', { class: 'actions' },
+        playBtn,
+        run && run.link ? h('a', { class: 'btn small', href: run.link, target: '_blank', rel: 'noopener' }, 'Open') : null,
         h('button', { class: 'btn small', onclick: () => { $('upRepo').value = p.id; showTab('upload'); schedulePreview(); } }, 'Upload'),
         h('button', { class: 'btn small', onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/pull`)).jobId); } catch (e) { alert(e.message); } } }, 'Pull'),
-        h('button', { class: 'btn small', onclick: () => api('POST', `/api/projects/${p.id}/open`).catch(e => alert(e.message)) }, 'Open'),
+        h('button', { class: 'btn small', onclick: () => api('POST', `/api/projects/${p.id}/open`).catch(e => alert(e.message)) }, 'Folder'),
         rm)));
   }
 }
@@ -298,6 +319,7 @@ function upsertJob(meta) {
   }
   if (j.open && !j.loaded) loadLines(j);
   renderJobs(); renderSyncBtn();
+  if (meta.type === 'play') renderProjects();
 }
 
 async function loadLines(j) {
@@ -333,13 +355,18 @@ function renderJobs() {
       h('div', { class: 'job-actions' },
         running ? h('button', { class: 'btn small', onclick: () => api('POST', `/api/jobs/${m.id}/cancel`) }, 'Cancel') : null,
         h('button', { class: 'link-btn', onclick: () => { j.open = !j.open; if (j.open && !j.loaded) loadLines(j); renderJobs(); } }, j.open ? 'Hide output' : 'Show output'),
-        m.link ? h('a', { href: m.link, target: '_blank', rel: 'noopener' }, 'View on GitHub') : null),
+        m.link ? h('a', { href: m.link, target: '_blank', rel: 'noopener' }, m.linkLabel || 'View on GitHub') : null),
       log);
     const logEl = el.querySelector('.log');
     if (logEl) logEl.scrollTop = logEl.scrollHeight;
     return el;
   }));
 }
+
+$('quitBtn').addEventListener('click', async () => {
+  try { await api('POST', '/api/quit'); } catch { /* server is already going down */ }
+  document.body.replaceChildren(h('div', { class: 'empty', style: 'padding:80px 20px;font-size:16px' }, 'Streamline has stopped. You can close this tab. Open Start-Streamline.vbs to run it again.'));
+});
 
 $('clearBtn').addEventListener('click', async () => { await api('POST', '/api/jobs/clear'); });
 
