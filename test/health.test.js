@@ -133,3 +133,12 @@ test('saving a custom setup clears the stale failed result so Play comes back', 
   health.forget(id);
   assert.equal(health.status().results[id], undefined);
 });
+
+test('a failed result is dropped once the project\'s recipe changes (so Play is not hidden by stale news)', async () => {
+  const p = mk('Late Fix', { 'README.md': 'nothing yet' });
+  store.saveProjects([...store.getProjects(), p]);
+  await waitJob(health.startCheck([p.id]));
+  assert.equal(health.status().results[p.id].status, 'fail');
+  fs.writeFileSync(path.join(p.localPath, 'index.html'), '<h1>now it is a page</h1>');
+  assert.equal(health.status().results[p.id], undefined);
+});
