@@ -12,6 +12,9 @@ const sync = require('./lib/sync');
 const auth = require('./lib/auth');
 const picker = require('./lib/picker');
 const launch = require('./lib/launch');
+const custom = require('./lib/custom');
+const health = require('./lib/health');
+const { buildPrompt } = require('./lib/prompt');
 const { openUrl, openFolderWindow } = require('./lib/open');
 const { DEFAULTS } = require('./lib/exclusions');
 const { gitExe, ghExe, run } = require('./lib/proc');
@@ -155,6 +158,17 @@ const routes = {
     return { plans, running };
   },
 
+  'GET /api/health': async () => health.status(),
+  'POST /api/health/run': async ({ body }) => ({ jobId: health.startCheck(Array.isArray(body.projectIds) ? body.projectIds.map(String) : null) }),
+  'GET /api/health/prompt': async () => health.fixPrompt(),
+  'POST /api/health/fix/check': async ({ body }) => health.applyReply(String(body.reply || ''), false),
+  'POST /api/health/fix/save': async ({ body }) => {
+    const r = health.applyReply(String(body.reply || ''), true);
+    // The app finishes the job: re-test whatever was just fixed.
+    if (r.saved && r.saved.length) r.jobId = health.startCheck(r.saved);
+    return r;
+  },
+
   'POST /api/quit': async () => {
     // Lets you stop the app from the browser (or Stop-Streamline.vbs) without any console window.
     setTimeout(() => process.exit(0), 150);
@@ -175,6 +189,21 @@ async function handleApi(req, res, url) {
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/pull$/)) && req.method === 'POST') {
     return send(res, 200, { jobId: clone.startPull(findProject(m[1])) });
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/prompt$/)) && req.method === 'GET') {
+    return send(res, 200, await buildPrompt(findProject(m[1])));
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/custom\/(check|save)$/)) && req.method === 'POST') {
+    const project = findProject(m[1]);
+    const v = custom.validate(project, String(body.reply || ''));
+    if (!v.ok) return send(res, 200, { ok: false, errors: v.errors, warnings: v.warnings, cannotRun: v.cannotRun || null, questions: v.questions || [] });
+    const preview = launch.previewCustom(project, v.config);
+    if (m[2] === 'save') custom.save(project.id, v.config);
+    return send(res, 200, { ok: true, saved: m[2] === 'save', warnings: v.warnings, config: v.config, ...preview });
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/custom$/)) && req.method === 'DELETE') {
+    findProject(m[1]);
+    return send(res, 200, { removed: custom.remove(m[1]) });
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/play$/)) && req.method === 'POST') {
     return send(res, 200, { jobId: launch.start(findProject(m[1])) });

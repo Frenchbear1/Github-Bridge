@@ -69,6 +69,13 @@ While a project runs, its output streams into Activity, the row shows **running*
 
 **Generated launchers stay out of your way.** For projects that need one, Streamline writes `Streamline-Play.bat` into the project folder, so you can also double-click it in Explorer. It adds that file (plus `node_modules/`, `.venv/` and similar, when your `.gitignore` does not already cover them) to the repository's local `.git/info/exclude`. That file is never committed or pushed, so these files do not appear as "untracked", and your sync script will not pause the project. Dependency installs never create or change a lock file, for the same reason. Streamline never overwrites a launcher it did not write, and never uploads `Streamline-Play.bat`.
 
+### When Play does not work: check everything, then let ChatGPT fix it
+
+- **Check all projects** (Projects tab) tries every project's Play button in the background, one at a time, with nothing opening in your browser. Web pages, built programs and extensions are verified to exist; servers are started, watched for a web address or a stable running state, then stopped; desktop apps only run their setup steps (installs) and are never launched, so no windows pop up. Each row gets **works**, **failed** (click it to see the error output), or **not tested** (your own launchers are left alone). Checking can install dependencies, the same as pressing Play would.
+- **Fix failures with ChatGPT** builds one prompt covering every failed project: folder listing, key build and config files, and the error each one hit (`.env`, keys and anything that looks like a secret are left out; you can read the exact text before copying it). Paste it into ChatGPT, paste its single reply back into the app, review what will be applied per project, and click **Apply and re-check**. Streamline saves the setups and re-tests those projects itself.
+- For a single project, use **Set up Play...** (or **Change...**) on its row for the same flow with just that project.
+- **A pasted reply is treated as untrusted.** Only well-known programs run (npm, node, python, dotnet, cargo, go, and similar), one plain command per step, no shell operators or quotes, every path must stay inside the project, no downloads, and you see the exact commands before anything is saved.
+
 ### Update Local GitHub: exit codes
 
 The script is run exactly as `1 - Refresh GitHub Projects.bat` runs it (`powershell -NoProfile -ExecutionPolicy Bypass -File ...`), just without a window, and it is never modified.

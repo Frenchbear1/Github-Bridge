@@ -65,7 +65,8 @@ async function loadState() {
   const s = await api('GET', '/api/state');
   Object.assign(state, s);
   try { state.plans = (await api('GET', '/api/play')).plans; } catch { state.plans = {}; }
-  renderAuth(); renderProjects(); renderUploadRepos(); renderSettings(); renderClone(); renderSyncBtn();
+  try { state.health = await api('GET', '/api/health'); } catch { state.health = { results: {}, counts: {}, at: null }; }
+  renderAuth(); renderHealth(); renderProjects(); renderUploadRepos(); renderSettings(); renderClone(); renderSyncBtn();
 }
 
 function renderAuth() {
@@ -101,6 +102,8 @@ function playingJob(projectId) {
   return [...jobs.values()].map(j => j.meta).find(m => m.type === 'play' && m.status === 'running' && m.projectId === projectId) || null;
 }
 
+const openProblems = new Set();
+
 function renderProjects() {
   const q = $('projSearch').value.trim().toLowerCase();
   const list = $('projList');
@@ -129,13 +132,20 @@ function renderProjects() {
         h('button', { class: 'btn small play', title: `${plan.label}: ${plan.detail}`, onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/play`)).jobId); } catch (e) { alert(e.message); } } }, '\u25B6 Play'),
         plan.stopFile ? h('button', { class: 'btn small ghost', title: `Runs ${plan.stopFile}`, onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, 'Stop') : null);
     } else {
-      playBtn = h('span', { class: 'noplay', title: plan && plan.detail ? plan.detail : 'Nothing to run in this project' }, 'No run step');
+      playBtn = h('button', { class: 'btn small', title: (plan && plan.detail ? plan.detail + '. ' : '') + 'Get help working out how to run it', onclick: () => openPlayDialog(p) }, 'Set up Play\u2026');
     }
+    const hr = ((state.health || {}).results || {})[p.id];
+    const open = openProblems.has(p.id);
+    const hTag = hr && !run ? h('span', { class: 'tag ' + hr.status, title: hr.note || hr.problem || '', onclick: () => { if (hr.status === 'fail' || hr.status === 'warn') { open ? openProblems.delete(p.id) : openProblems.add(p.id); renderProjects(); } } },
+      { ok: '\u2713 works', fail: '\u2717 failed', warn: '? unsure', skip: 'not tested' }[hr.status] || hr.status) : null;
+    const problem = hr && open && (hr.status === 'fail' || hr.status === 'warn')
+      ? h('div', { class: 'problem' }, h('div', {}, hr.problem), (hr.output || []).length ? h('pre', {}, hr.output.join('\n')) : null) : null;
     const how = plan ? [plan.label, plan.detail].filter(Boolean).join(' \u00B7 ') : '';
     list.append(h('div', { class: 'item' },
       h('div', { class: 'grow' },
-        h('div', { class: 'name' }, p.name, h('span', { class: 'tag' }, p.branch), p.exists ? null : h('span', { class: 'tag bad' }, 'folder missing'), run ? h('span', { class: 'tag live' }, 'running') : null),
-        plan && plan.canPlay ? h('div', { class: 'how', title: (plan.notes || []).join(' ') }, how) : null,
+        h('div', { class: 'name' }, p.name, h('span', { class: 'tag' }, p.branch), p.exists ? null : h('span', { class: 'tag bad' }, 'folder missing'), run ? h('span', { class: 'tag live' }, 'running') : null, plan && plan.source === 'custom' ? h('span', { class: 'tag custom' }, 'custom') : null, hTag),
+        plan && plan.canPlay ? h('div', { class: 'how', title: (plan.notes || []).join(' ') }, how, h('button', { class: 'linkish', title: 'Not right? Set it up differently', onclick: () => openPlayDialog(p) }, 'Change\u2026')) : null,
+        problem,
         h('div', { class: 'path', title: p.localPath }, p.localPath)),
       h('div', { class: 'actions' },
         playBtn,
@@ -166,6 +176,195 @@ $('scanBtn').addEventListener('click', async () => {
     notice($('projMsg'), r.added ? `Imported ${r.added} project${r.added === 1 ? '' : 's'} from ${(state.settings || {}).projectsRoot}.` : 'No new Git projects found in that folder.', r.added ? 'ok' : '');
     await loadState();
   } catch (e) { notice($('projMsg'), e.message, 'err'); }
+});
+
+
+/* ---------- Set up Play (ChatGPT fallback) ---------- */
+const dlg = { project: null, timer: null, seq: 0 };
+
+async function openPlayDialog(p) {
+  dlg.project = p;
+  const plan = state.plans[p.id] || {};
+  $('dlgTitle').textContent = `Set up Play: ${p.name}`;
+  $('dlgWhy').textContent = plan.canPlay
+    ? `Streamline will currently run this as "${plan.label}" (${plan.detail}). If that is not what you want, replace it with a setup from ChatGPT.`
+    : `Streamline could not tell how to run this project${plan.detail ? ` (${plan.detail})` : ''}. ChatGPT can work it out from the project's files, and you paste its answer back here.`;
+  $('dlgReply').value = ''; $('dlgResult').replaceChildren(); $('dlgCopied').textContent = '';
+  $('dlgSave').disabled = true; $('dlgSaveRun').disabled = true;
+  $('dlgReset').classList.toggle('hidden', !(plan.source === 'custom'));
+  $('dlgPrompt').value = 'Preparing…'; $('dlgChars').textContent = '';
+  if (!$('playDlg').open) $('playDlg').showModal();
+  try {
+    const r = await api('GET', `/api/projects/${p.id}/prompt`);
+    $('dlgPrompt').value = r.prompt;
+    $('dlgChars').textContent = `(${r.chars.toLocaleString()} characters, ${r.included.length} files)`;
+  } catch (e) { $('dlgPrompt').value = ''; $('dlgResult').replaceChildren(h('div', { class: 'notice err' }, e.message)); }
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* fall back below */ }
+  const ta = $('dlgPrompt');
+  ta.select();
+  try { return document.execCommand('copy'); } catch { return false; }
+}
+
+$('dlgCopy').addEventListener('click', async () => {
+  const ok = await copyText($('dlgPrompt').value);
+  $('dlgCopied').textContent = ok ? 'Copied. Paste it into ChatGPT, then paste its reply below.' : 'Could not copy automatically. Open "See exactly what gets copied" and copy the text yourself.';
+});
+$('dlgClose').addEventListener('click', () => $('playDlg').close());
+
+let dlgOk = false;
+function renderDlgResult(r) {
+  const box = $('dlgResult');
+  box.replaceChildren();
+  dlgOk = !!r.ok;
+  $('dlgSave').disabled = !r.ok; $('dlgSaveRun').disabled = !r.ok;
+  if (r.cannotRun) {
+    box.append(h('div', { class: 'notice warn' }, 'ChatGPT could not work it out: ' + r.cannotRun),
+      r.questions && r.questions.length ? h('div', { class: 'hint' }, 'It needs to know: ' + r.questions.join(' • ') + '. Answer in the same ChatGPT chat, then paste its new reply here.') : null);
+    return;
+  }
+  for (const e of r.errors || []) box.append(h('div', { class: 'notice err' }, e));
+  for (const w of r.warnings || []) box.append(h('div', { class: 'notice warn' }, w));
+  if (!r.ok) return;
+  const c = r.config;
+  const rev = h('div', { class: 'review' }, h('h4', {}, 'Review: this is exactly what Play will do'));
+  if (c.kind === 'command') {
+    if (c.needs.length) rev.append(h('div', {}, 'Needs installed: ', c.needs.map(n => n.exe).join(', ')));
+    const steps = [...c.setup.map(s => `${s.cwd ? `[in ${s.cwd}] ` : ''}${s.cmd}${s.skipIfExists ? `   (first time only: skipped once ${s.skipIfExists} exists)` : ''}`), `${c.run.cwd ? `[in ${c.run.cwd}] ` : ''}${c.run.cmd}`];
+    rev.append(h('ol', {}, steps.map(t => h('li', {}, h('code', {}, t)))));
+    if (c.openUrl) rev.append(h('div', {}, 'Then opens ', h('code', {}, c.openUrl)));
+    if (Object.keys(c.run.env || {}).length) rev.append(h('div', {}, 'With: ', h('code', {}, Object.entries(c.run.env).map(([k, v]) => `${k}=${v}`).join(' '))));
+  } else if (c.kind === 'open-file') rev.append(h('div', {}, 'Opens ', h('code', {}, c.file), r.summary && r.summary.action === 'serve' ? ' through a local server (it needs one).' : ' in your browser.'));
+  else rev.append(h('div', {}, 'Starts ', h('code', {}, c.file)));
+  if (c.notes) rev.append(h('div', { class: 'hint' }, c.notes));
+  if (r.bat) rev.append(h('details', { class: 'more' }, h('summary', {}, 'Show the launcher file this creates'), h('pre', {}, r.bat)));
+  box.append(rev);
+}
+
+async function checkReply() {
+  const text = $('dlgReply').value;
+  const seq = ++dlg.seq;
+  if (!text.trim()) { $('dlgResult').replaceChildren(); $('dlgSave').disabled = true; $('dlgSaveRun').disabled = true; return; }
+  try {
+    const r = await api('POST', `/api/projects/${dlg.project.id}/custom/check`, { reply: text });
+    if (seq === dlg.seq) renderDlgResult(r);
+  } catch (e) { if (seq === dlg.seq) renderDlgResult({ ok: false, errors: [e.message] }); }
+}
+$('dlgReply').addEventListener('input', () => { clearTimeout(dlg.timer); dlg.timer = setTimeout(checkReply, 400); });
+
+async function saveCustom(runAfter) {
+  try {
+    const r = await api('POST', `/api/projects/${dlg.project.id}/custom/save`, { reply: $('dlgReply').value });
+    if (!r.ok) return renderDlgResult(r);
+    $('playDlg').close();
+    await loadState();
+    if (runAfter) focusJob((await api('POST', `/api/projects/${dlg.project.id}/play`)).jobId);
+  } catch (e) { renderDlgResult({ ok: false, errors: [e.message] }); }
+}
+$('dlgSave').addEventListener('click', () => saveCustom(false));
+$('dlgSaveRun').addEventListener('click', () => saveCustom(true));
+$('dlgReset').addEventListener('click', async () => {
+  await api('DELETE', `/api/projects/${dlg.project.id}/custom`);
+  $('playDlg').close(); await loadState();
+});
+
+
+/* ---------- health check ---------- */
+function renderHealth() {
+  const bar = $('healthBar');
+  const hs = state.health || {};
+  const c = hs.counts || {};
+  const total = (c.ok || 0) + (c.fail || 0) + (c.warn || 0) + (c.skip || 0);
+  bar.replaceChildren();
+  $('checkBtn').disabled = !!hs.running;
+  $('checkBtn').textContent = hs.running ? 'Checking…' : (total ? 'Check again' : 'Check all projects');
+  if (!total && !hs.running) return bar.classList.add('hidden');
+  bar.classList.remove('hidden');
+  const jj = [...jobs.values()].find(j => j.meta.type === 'check' && j.meta.status === 'running');
+  const job = jj && jj.meta;
+  bar.append(h('span', { class: 'grow' },
+    hs.running ? `Checking projects${job && job.progress ? ': ' + job.progress : '…'}` : `Last check${hs.at ? ' ' + new Date(hs.at).toLocaleString() : ''}: `,
+    hs.running ? null : h('strong', {}, `${c.ok || 0} work`), hs.running ? null : `, ${c.fail || 0} failed`, !hs.running && c.warn ? `, ${c.warn} unsure` : null, !hs.running && c.skip ? `, ${c.skip} not tested` : null));
+  if (!hs.running && ((c.fail || 0) + (c.warn || 0)) > 0) bar.append(h('button', { class: 'btn small primary', onclick: openFixDialog }, 'Fix failures with ChatGPT…'));
+}
+
+let healthTimer = null;
+function refreshHealthSoon() {
+  clearTimeout(healthTimer);
+  healthTimer = setTimeout(async () => {
+    try { state.health = await api('GET', '/api/health'); renderHealth(); renderProjects(); } catch { /* ignore */ }
+  }, 400);
+}
+
+$('checkBtn').addEventListener('click', async () => {
+  try {
+    const r = await api('POST', '/api/health/run', {});
+    state.health = { ...(state.health || {}), running: true }; renderHealth();
+    focusJob(r.jobId);
+  } catch (e) { notice($('projMsg'), e.message, 'err'); }
+});
+
+const fix = { seq: 0, timer: null };
+async function openFixDialog() {
+  $('fixReply').value = ''; $('fixResult').replaceChildren(); $('fixCopied').textContent = ''; $('fixSave').disabled = true;
+  $('fixPrompt').value = 'Preparing…'; $('fixChars').textContent = ''; $('fixWhy').textContent = '';
+  if (!$('fixDlg').open) $('fixDlg').showModal();
+  try {
+    const r = await api('GET', '/api/health/prompt');
+    $('fixPrompt').value = r.prompt;
+    $('fixChars').textContent = `(${r.chars.toLocaleString()} characters, ${r.projects.length} project${r.projects.length === 1 ? '' : 's'})`;
+    $('fixWhy').textContent = r.left ? `${r.projects.length} projects are in this prompt. ${r.left} more failed. Apply this batch first, then use "Check again" and "Fix failures" for the rest.` : 'Streamline tried each project and these failed. ChatGPT works out what each one needs, and the app applies it and re-tests.';
+  } catch (e) { $('fixPrompt').value = ''; $('fixResult').replaceChildren(h('div', { class: 'notice err' }, e.message)); }
+}
+$('fixClose').addEventListener('click', () => $('fixDlg').close());
+$('fixCopy').addEventListener('click', async () => {
+  let ok = false;
+  try { await navigator.clipboard.writeText($('fixPrompt').value); ok = true; } catch { $('fixPrompt').select(); try { ok = document.execCommand('copy'); } catch { /* ignore */ } }
+  $('fixCopied').textContent = ok ? 'Copied. Paste it into ChatGPT, then paste its reply below.' : 'Could not copy automatically. Open "See exactly what gets copied" and copy the text yourself.';
+});
+
+function renderFixResult(r) {
+  const box = $('fixResult');
+  box.replaceChildren();
+  $('fixSave').disabled = !r.ok;
+  for (const e of r.errors || []) box.append(h('div', { class: 'notice err' }, e));
+  for (const it of r.items || []) {
+    if (!it.ok) {
+      box.append(h('div', { class: 'review' }, h('h4', {}, `${it.name}: not applied`),
+        it.cannotRun ? h('div', {}, 'ChatGPT could not work it out: ' + it.cannotRun + (it.questions && it.questions.length ? ' It needs to know: ' + it.questions.join(' • ') : '')) : null,
+        ...(it.errors || []).map(e => h('div', { class: 'notice err' }, e))));
+      continue;
+    }
+    const c = it.config;
+    const steps = c.kind === 'command'
+      ? [...c.setup.map(s => `${s.cwd ? `[in ${s.cwd}] ` : ''}${s.cmd}`), `${c.run.cwd ? `[in ${c.run.cwd}] ` : ''}${c.run.cmd}`]
+      : [c.kind === 'open-file' ? `Open ${c.file}` : `Start ${c.file}`];
+    box.append(h('div', { class: 'review' }, h('h4', {}, `${it.name}: will be applied`),
+      h('ol', {}, steps.map(t => h('li', {}, h('code', {}, t)))),
+      c.openUrl ? h('div', {}, 'Then opens ', h('code', {}, c.openUrl)) : null,
+      c.notes ? h('div', { class: 'hint' }, c.notes) : null,
+      ...(it.warnings || []).map(w => h('div', { class: 'notice warn' }, w))));
+  }
+}
+$('fixReply').addEventListener('input', () => {
+  clearTimeout(fix.timer);
+  fix.timer = setTimeout(async () => {
+    const text = $('fixReply').value; const seq = ++fix.seq;
+    if (!text.trim()) { $('fixResult').replaceChildren(); $('fixSave').disabled = true; return; }
+    try { const r = await api('POST', '/api/health/fix/check', { reply: text }); if (seq === fix.seq) renderFixResult(r); }
+    catch (e) { if (seq === fix.seq) renderFixResult({ ok: false, errors: [e.message], items: [] }); }
+  }, 400);
+});
+$('fixSave').addEventListener('click', async () => {
+  try {
+    const r = await api('POST', '/api/health/fix/save', { reply: $('fixReply').value });
+    if (!r.saved || !r.saved.length) return renderFixResult(r);
+    $('fixDlg').close();
+    await loadState();
+    if (r.jobId) focusJob(r.jobId);
+  } catch (e) { renderFixResult({ ok: false, errors: [e.message], items: [] }); }
 });
 
 /* ---------- clone ---------- */
@@ -320,6 +519,7 @@ function upsertJob(meta) {
   if (j.open && !j.loaded) loadLines(j);
   renderJobs(); renderSyncBtn();
   if (meta.type === 'play') renderProjects();
+  if (meta.type === 'check') { if (meta.status === 'running') { const hs = state.health || (state.health = {}); hs.running = true; renderHealth(); } refreshHealthSoon(); }
 }
 
 async function loadLines(j) {

@@ -34,7 +34,9 @@
         <input id="projSearch" type="search" placeholder="Search projects…" autocomplete="off">
         <button id="addFolderBtn" class="btn">Add existing folder…</button>
         <button id="scanBtn" class="btn">Import from projects folder</button>
+        <button id="checkBtn" class="btn primary" title="Tries every project's Play button in the background and reports what works">Check all projects</button>
       </div>
+      <div id="healthBar" class="healthbar hidden"></div>
       <div id="projMsg" class="notice hidden"></div>
       <div id="projList" class="list"></div>
     </div>
@@ -105,6 +107,42 @@
     <div id="jobs"></div>
   </aside>
 </main>
+<dialog id="playDlg">
+  <div class="dlg-head"><h2 id="dlgTitle">Set up Play</h2><button id="dlgClose" class="btn small ghost" title="Close">✕</button></div>
+  <div class="dlg-body">
+    <p class="hint" id="dlgWhy"></p>
+    <div class="step"><div class="stepn">1</div><div class="stepc">
+      <strong>Copy the prompt and give it to ChatGPT</strong>
+      <div class="row"><button id="dlgCopy" class="btn primary">Copy prompt for ChatGPT</button><a class="btn" href="https://chatgpt.com/" target="_blank" rel="noopener">Open ChatGPT</a><span id="dlgCopied" class="hint"></span></div>
+      <details class="more"><summary>See exactly what gets copied <span id="dlgChars"></span></summary><textarea id="dlgPrompt" readonly rows="8" spellcheck="false"></textarea></details>
+      <small class="hint">It contains this project's folder listing and its build/config files. Secrets such as .env files are left out. Only paste it into ChatGPT if you are comfortable with that.</small>
+    </div></div>
+    <div class="step"><div class="stepn">2</div><div class="stepc">
+      <strong>Paste ChatGPT's reply here</strong>
+      <textarea id="dlgReply" rows="6" spellcheck="false" placeholder="Paste the whole reply, including the JSON block. It is checked as soon as you paste."></textarea>
+      <div id="dlgResult"></div>
+    </div></div>
+  </div>
+  <div class="dlg-foot"><button id="dlgReset" class="btn danger hidden">Remove custom setup</button><span class="grow"></span><button id="dlgSave" class="btn" disabled>Save</button><button id="dlgSaveRun" class="btn primary" disabled>Save and run</button></div>
+</dialog>
+<dialog id="fixDlg">
+  <div class="dlg-head"><h2>Fix failed projects with ChatGPT</h2><button id="fixClose" class="btn small ghost" title="Close">\u2715</button></div>
+  <div class="dlg-body">
+    <p class="hint" id="fixWhy"></p>
+    <div class="step"><div class="stepn">1</div><div class="stepc">
+      <strong>Copy one prompt that covers every failed project</strong>
+      <div class="row"><button id="fixCopy" class="btn primary">Copy prompt for ChatGPT</button><a class="btn" href="https://chatgpt.com/" target="_blank" rel="noopener">Open ChatGPT</a><span id="fixCopied" class="hint"></span></div>
+      <details class="more"><summary>See exactly what gets copied <span id="fixChars"></span></summary><textarea id="fixPrompt" readonly rows="8" spellcheck="false"></textarea></details>
+      <small class="hint">It contains each failed project's folder listing, its build and config files, and the error it hit. Secrets such as .env files are left out. Only paste it into ChatGPT if you are comfortable with that.</small>
+    </div></div>
+    <div class="step"><div class="stepn">2</div><div class="stepc">
+      <strong>Paste ChatGPT's single reply here</strong>
+      <textarea id="fixReply" rows="6" spellcheck="false" placeholder="Paste the whole reply. It is checked as soon as you paste."></textarea>
+      <div id="fixResult"></div>
+    </div></div>
+  </div>
+  <div class="dlg-foot"><span class="grow"></span><button id="fixSave" class="btn primary" disabled>Apply and re-check</button></div>
+</dialog>
 <script src="app.js"></script>
 </body>
 </html>

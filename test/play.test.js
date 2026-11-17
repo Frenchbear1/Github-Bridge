@@ -117,7 +117,7 @@ test('generated .bat is well formed for cmd.exe', () => {
   for (const l of inBlock) assert.ok(!/[()&|<>^%]/.test(l.replace(/^\s+echo /, '')), 'unsafe echo: ' + l);
   const py = launch.renderBat(d('b2', { 'main.py': 'print(1)', 'requirements.txt': 'x' }));
   assert.match(py, /%PY% -m venv \.venv/); assert.match(py, /fc \/b "requirements\.txt" "\.venv\\\.streamline-deps"/);
-  assert.match(py, /set PY="\.venv\\Scripts\\python\.exe"\r\n%PY% main\.py/);
+  assert.match(py, /set PY="\.venv\\Scripts\\python\.exe"\r\n(echo Streamline: starting [^\r]*\r\nif defined STREAMLINE_DRY goto :dry\r\n)?%PY% main\.py/);
   for (const l of py.split('\r\n').filter(l => /^\s+echo /.test(l))) assert.ok(!/[()&|<>^%]/.test(l.replace(/^\s+echo /, '')), 'unsafe echo: ' + l);
   for (const k of [d('b3', { 'Cargo.toml': '' }), d('b4', { 'go.mod': 'x' }), d('b5', { 'X.csproj': '<OutputType>Exe</OutputType>' })]) {
     for (const l of launch.renderBat(k).split('\r\n').filter(l => /echo /.test(l) && /where/.test(l))) {
@@ -125,6 +125,15 @@ test('generated .bat is well formed for cmd.exe', () => {
       assert.ok(!/[()<>^%|]/.test(inner), 'unsafe prerequisite text: ' + inner);
     }
   }
+});
+
+test('cmd.exe invocation survives folders with spaces (Codex Only)', () => {
+  const f = 'C:\\Users\\x\\Downloads\\Codex Only\\GitHub Projects\\app\\Streamline-Play.bat';
+  const a = launch.cmdArgs(f);
+  assert.deepEqual(a.slice(0, 3), ['/d', '/s', '/c']);
+  // what cmd.exe actually receives after /s removes the outer pair of quotes:
+  const afterStrip = a[3].slice(1, -1);
+  assert.equal(afterStrip, '"' + f + '"');
 });
 
 test('web address detection', () => {
