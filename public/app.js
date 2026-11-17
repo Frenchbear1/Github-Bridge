@@ -289,6 +289,10 @@ async function openWith(p) {
     catch (e) { notice($('openMsg'), `Could not open ${label}: ${e.message}`, 'err'); }
   };
   list.append(h('button', { class: 'btn', onclick: () => go(null, 'the folder') }, 'File Explorer', h('span', { class: 'sub' }, 'the project folder')));
+  list.append(h('button', { class: 'btn', onclick: async () => {
+    try { await api('POST', `/api/projects/${p.id}/open`, { github: true }); $('openDlg').close(); }
+    catch (e) { notice($('openMsg'), e.message, 'err'); }
+  } }, 'GitHub repository', h('span', { class: 'sub' }, 'opens it in your browser')));
   for (const e of eds) list.append(h('button', { class: 'btn', onclick: () => go(e.id, e.label) }, e.label,
     e.id === 'notepad' || e.id === 'notepadpp' ? h('span', { class: 'sub' }, 'opens the main file') : null));
 }

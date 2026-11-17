@@ -18,7 +18,8 @@ const editors = require('./lib/editors');
 const { buildPrompt } = require('./lib/prompt');
 const { openUrl, openFolderWindow } = require('./lib/open');
 const { DEFAULTS } = require('./lib/exclusions');
-const { gitExe, ghExe, run } = require('./lib/proc');
+const { webUrlFromRemote } = require('./lib/util');
+const { gitExe, ghExe, run, git: gitRun } = require('./lib/proc');
 const { IS_WIN } = require('./lib/util');
 const pkg = require('./package.json');
 
@@ -220,6 +221,13 @@ async function handleApi(req, res, url) {
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/open$/)) && req.method === 'POST') {
     const project = findProject(m[1]);
+    if (body.github) {
+      const r = await gitRun(project.localPath, ['remote', 'get-url', 'origin']);
+      const web = webUrlFromRemote(r.out);
+      if (!web) throw new HttpError(400, 'This project has no GitHub remote called "origin".');
+      openUrl(web);
+      return send(res, 200, { ok: true, url: web });
+    }
     if (body.editor) return send(res, 200, { ok: true, ...editors.openIn(String(body.editor), project.localPath) });
     openFolder(project.localPath);
     return send(res, 200, { ok: true });
