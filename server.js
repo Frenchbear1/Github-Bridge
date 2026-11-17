@@ -162,6 +162,7 @@ const routes = {
 
   'GET /api/editors': async () => ({ editors: editors.list(true).map(({ id, label }) => ({ id, label })) }),
   'GET /api/health': async () => health.status(),
+  'POST /api/health/ignore': async ({ body }) => { findProject(String(body.id)); return health.setIgnored(String(body.id), !!body.ignored); },
   'POST /api/health/run': async ({ body }) => ({ jobId: health.startCheck(Array.isArray(body.projectIds) ? body.projectIds.map(String) : null) }),
   'GET /api/health/prompt': async () => health.fixPrompt(),
   'POST /api/health/fix/check': async ({ body }) => health.applyReply(String(body.reply || ''), false),
@@ -257,7 +258,7 @@ function watchForClose() {
     last = now;
     if (streams.size) { everConnected = true; emptySince = now; return; }
     if (resumed) emptySince = now;
-    if (jobs.list().some(j => j.status === 'running')) { emptySince = now; return; } // something is still running
+    if (jobs.list().some(j => j.status === 'running' || j.live)) { emptySince = now; return; } // something is still running
     if (now - emptySince >= (everConnected ? grace : firstGrace)) { console.log('Browser tab closed. Streamline is stopping.'); process.exit(0); }
   }, 1000).unref();
 }

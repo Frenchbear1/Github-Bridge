@@ -99,7 +99,7 @@ $('syncBtn').addEventListener('click', async () => {
 
 /* ---------- projects ---------- */
 function playingJob(projectId) {
-  return [...jobs.values()].map(j => j.meta).find(m => m.type === 'play' && m.status === 'running' && m.projectId === projectId) || null;
+  return [...jobs.values()].map(j => j.meta).find(m => m.type === 'play' && (m.status === 'running' || m.live) && m.projectId === projectId) || null;
 }
 
 const openProblems = new Set();
@@ -124,24 +124,24 @@ function renderProjects() {
     });
     const plan = state.plans[p.id];
     const run = playingJob(p.id);
-    let playBtn;
+    const hr = ((state.health || {}).results || {})[p.id];
+    let playBtn = null;
     if (run) {
       playBtn = h('button', { class: 'btn small danger-fill', title: 'Stop this project', onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, '\u25A0 Stop');
-    } else if (plan && plan.canPlay) {
+    } else if (plan && plan.canPlay && !(hr && hr.status === 'fail')) {
       playBtn = h('span', { class: 'btnpair' },
         h('button', { class: 'btn small play', title: `${plan.label}: ${plan.detail}`, onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/play`)).jobId); } catch (e) { alert(e.message); } } }, '\u25B6 Play'),
         plan.stopFile ? h('button', { class: 'btn small ghost', title: `Runs ${plan.stopFile}`, onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, 'Stop') : null);
-    } else {
-      playBtn = h('button', { class: 'btn small', title: (plan && plan.detail ? plan.detail + '. ' : '') + 'Get help working out how to run it', onclick: () => openPlayDialog(p) }, 'Set up Play\u2026');
     }
-    const hr = ((state.health || {}).results || {})[p.id];
     const open = openProblems.has(p.id);
     const hTag = hr && !run ? h('span', { class: 'tag ' + hr.status, title: hr.note || hr.problem || '', onclick: () => { if (hr.status === 'fail' || hr.status === 'warn') { open ? openProblems.delete(p.id) : openProblems.add(p.id); renderProjects(); } } },
-      { ok: '\u2713 works', fail: '\u2717 failed', warn: '? unsure', skip: 'not tested' }[hr.status] || hr.status) : null;
+      (hr.ignored ? { fail: '\u2717 failed (ignored)', warn: '? unsure (ignored)' }[hr.status] : { ok: '\u2713 works', fail: '\u2717 failed', warn: '? unsure', skip: 'not tested' }[hr.status]) || hr.status) : null;
     const problem = hr && open && (hr.status === 'fail' || hr.status === 'warn')
       ? h('div', { class: 'problem' },
         h('div', { class: 'pbody' }, h('div', {}, hr.problem), (hr.output || []).length ? h('pre', {}, hr.output.join('\n')) : null),
-        h('button', { class: 'btn small primary', title: 'Builds a ChatGPT prompt that includes this error', onclick: () => openPlayDialog(p, { problem: hr.problem, output: hr.output || [] }) }, 'Fix with ChatGPT\u2026')) : null;
+        h('div', { class: 'pbtns' },
+          h('button', { class: 'btn small primary', title: 'Builds a ChatGPT prompt that includes this error', onclick: () => openPlayDialog(p, { problem: hr.problem, output: hr.output || [] }) }, 'Fix with ChatGPT\u2026'),
+          h('button', { class: 'btn small', title: hr.ignored ? 'Count this failure again' : 'Hide this failure from the banner and the ChatGPT prompt', onclick: async () => { try { state.health = await api('POST', '/api/health/ignore', { id: p.id, ignored: !hr.ignored }); renderHealth(); renderProjects(); } catch (e) { alert(e.message); } } }, hr.ignored ? 'Stop ignoring' : 'Ignore'))) : null;
     const how = plan ? [plan.label, plan.detail].filter(Boolean).join(' \u00B7 ') : '';
     list.append(h('div', { class: 'item' },
       h('div', { class: 'grow' },
@@ -303,7 +303,7 @@ function renderHealth() {
   const bar = $('healthBar');
   const hs = state.health || {};
   const c = hs.counts || {};
-  const total = (c.ok || 0) + (c.fail || 0) + (c.warn || 0) + (c.skip || 0);
+  const total = (c.ok || 0) + (c.fail || 0) + (c.warn || 0) + (c.skip || 0) + (c.ignored || 0);
   bar.replaceChildren();
   $('checkBtn').disabled = !!hs.running;
   $('checkBtn').textContent = hs.running ? 'Checking…' : (total ? 'Check again' : 'Check all projects');
@@ -313,7 +313,7 @@ function renderHealth() {
   const job = jj && jj.meta;
   bar.append(h('span', { class: 'grow' },
     hs.running ? `Checking projects${job && job.progress ? ': ' + job.progress : '…'}` : `Last check${hs.at ? ' ' + new Date(hs.at).toLocaleString() : ''}: `,
-    hs.running ? null : h('strong', {}, `${c.ok || 0} work`), hs.running ? null : `, ${c.fail || 0} failed`, !hs.running && c.warn ? `, ${c.warn} unsure` : null, !hs.running && c.skip ? `, ${c.skip} not tested` : null));
+    hs.running ? null : h('strong', {}, `${c.ok || 0} work`), hs.running ? null : `, ${c.fail || 0} failed`, !hs.running && c.warn ? `, ${c.warn} unsure` : null, !hs.running && c.skip ? `, ${c.skip} not tested` : null, !hs.running && c.ignored ? `, ${c.ignored} ignored` : null));
   if (!hs.running && ((c.fail || 0) + (c.warn || 0)) > 0) bar.append(h('button', { class: 'btn small primary', onclick: openFixDialog }, 'Fix failures with ChatGPT…'));
 }
 

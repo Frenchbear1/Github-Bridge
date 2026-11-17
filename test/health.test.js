@@ -115,3 +115,13 @@ test('interactive command-line tools are not run hidden: check is a dry run, Pla
   custom.save(w.id, { streamline: 1, kind: 'command', needs: [], setup: [], run: { cmd: 'python app.py', cwd: '', env: {} }, openUrl: '', opensWindow: false, notes: '' });
   assert.equal(launch.detect(w).interactive, false);
 });
+
+test('ignored failures leave the counts and the ChatGPT prompt, and can be restored', async () => {
+  await waitJob(health.startCheck());
+  const mystery = by('Mystery').id;
+  const before = health.status().counts.fail;
+  const after = health.setIgnored(mystery, true);
+  assert.equal(after.counts.fail, before - 1); assert.equal(after.counts.ignored, 1); assert.equal(after.results[mystery].ignored, true);
+  assert.doesNotMatch((await health.fixPrompt()).prompt, /PROJECT: Mystery/);
+  assert.equal(health.setIgnored(mystery, false).counts.fail, before);
+});

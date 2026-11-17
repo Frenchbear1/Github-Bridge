@@ -190,7 +190,9 @@ test('Play runs a node project, auto-opens the browser, and keeps git clean', as
   const url = await until(async () => (await job(r.body.jobId)).link);
   assert.match(url, /^http:\/\/localhost:\d+\/$/);
   assert.match(fs.readFileSync(openLog, 'utf8'), /http:\/\/localhost:\d+\//);
-  assert.equal((await job(r.body.jobId)).status, 'running');
+  // a program that keeps running is reported as a success running in the background, never as "working"
+  const live = await job(r.body.jobId);
+  assert.equal(live.status, 'success'); assert.equal(live.live, true); assert.match(live.summary, /running in the background/i);
   assert.equal((await call('GET', '/api/play')).body.running[proj.id], r.body.jobId);
 
   // playing twice just returns the running job
@@ -201,6 +203,7 @@ test('Play runs a node project, auto-opens the browser, and keeps git clean', as
 
   assert.equal((await call('POST', `/api/projects/${proj.id}/stop`)).body.stopped, true);
   await until(async () => (await job(r.body.jobId)).status === 'cancelled');
+  assert.equal((await job(r.body.jobId)).live, false);
   assert.equal((await call('GET', '/api/play')).body.running[proj.id], undefined);
 });
 
