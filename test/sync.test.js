@@ -146,3 +146,99 @@ test('a missing projects folder is explained', () => {
   assert.throws(() => sync.startSync(), /Projects folder not found/);
   store.saveSettings({ projectsRoot: root });
 });
+
+/* ---------- what is in the way, and clearing it ---------- */
+const syncfix = require('../lib/syncfix');
+const lastResults = () => jobs.list().find(j => j.type === 'sync' && j.status !== 'running').results;
+
+test('a paused project lists the exact files; Move out sets them aside and updates', async () => {
+  store.saveSettings({ projectsRoot: root });
+  makeRemote('kappa'); cloneLocal('kappa');
+  setRepos(['kappa']);
+  pushChange('kappa', 'from-github.txt');
+  const dir = path.join(root, 'kappa');
+  fs.writeFileSync(path.join(dir, 'README.md'), 'my edit\n');
+  fs.mkdirSync(path.join(dir, 'notes'));
+  fs.writeFileSync(path.join(dir, 'notes', 'todo.txt'), 'mine');
+  const { job, lines } = await runSync();
+  const r = job.results.find(x => x.name === 'kappa');
+  assert.equal(r.state, 'Paused');
+  assert.equal(r.info.code, 'dirty');
+  assert.deepEqual(r.info.files.map(f => `${f.kind}:${f.path}`).sort(), ['edited:README.md', 'new:notes/todo.txt']);
+  assert.ok(lines.some(l => /new file: notes\/todo\.txt/.test(l)));
+
+  const out = await syncfix.fix({ name: 'kappa', action: 'moveout', paths: ['README.md', 'notes/todo.txt'] });
+  assert.equal(out.result.state, 'Updated', JSON.stringify(out));
+  assert.equal(fs.readFileSync(path.join(root, '_Set aside', 'kappa', 'README.md'), 'utf8'), 'my edit\n');
+  assert.equal(fs.readFileSync(path.join(root, '_Set aside', 'kappa', 'notes', 'todo.txt'), 'utf8'), 'mine');
+  assert.equal(fs.readFileSync(path.join(dir, 'README.md'), 'utf8'), 'kappa\n');
+  assert.ok(fs.existsSync(path.join(dir, 'from-github.txt')));
+  assert.equal(lastResults().find(x => x.name === 'kappa').state, 'Updated', 'the stored results are updated too');
+});
+
+test('Delete removes a new file; a deleted tracked file can be restored; staged files are handled', async () => {
+  pushChange('kappa', 'again.txt');
+  const dir = path.join(root, 'kappa');
+  fs.writeFileSync(path.join(dir, 'junk.log'), 'x');
+  fs.writeFileSync(path.join(dir, 'staged.txt'), 'y'); sh(dir, 'add', 'staged.txt');
+  fs.rmSync(path.join(dir, 'README.md'));
+  await runSync();
+  const r = lastResults().find(x => x.name === 'kappa');
+  assert.deepEqual(r.info.files.map(f => f.kind).sort(), ['added', 'deleted', 'new']);
+  const out = await syncfix.fix({ name: 'kappa', action: 'delete', paths: ['junk.log', 'staged.txt', 'README.md'] });
+  assert.equal(out.result.state, 'Updated', JSON.stringify(out));
+  assert.ok(!fs.existsSync(path.join(dir, 'junk.log')));
+  assert.ok(!fs.existsSync(path.join(dir, 'staged.txt')));
+  assert.ok(fs.existsSync(path.join(dir, 'README.md')));
+});
+
+test('files outside the project or not reported by Git are refused', async () => {
+  await assert.rejects(syncfix.fix({ name: 'kappa', action: 'delete', paths: ['../alpha/README.md'] }), /inside the project/);
+  await assert.rejects(syncfix.fix({ name: 'kappa', action: 'delete', paths: ['.git/config'] }), /inside the project/);
+  await assert.rejects(syncfix.fix({ name: '..', action: 'delete', paths: ['x'] }), /Unknown project/);
+  const out = await syncfix.fix({ name: 'kappa', action: 'delete', paths: ['README.md'] });
+  assert.match(out.done[0], /nothing to do/);
+  assert.ok(fs.existsSync(path.join(root, 'kappa', 'README.md')), 'a clean tracked file is never touched');
+});
+
+test('a file that would be overwritten is named; local commits are listed; wrong branch can be switched back', async () => {
+  const dir = path.join(root, 'kappa');
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'secret.cfg\n');
+  const w = path.join(work, 'kappa');
+  fs.writeFileSync(path.join(w, 'secret.cfg'), 'from github'); sh(w, 'add', '-f', 'secret.cfg'); sh(w, 'commit', '-q', '-m', 'track it'); sh(w, 'push', '-q', 'origin', 'main');
+  fs.writeFileSync(path.join(dir, 'secret.cfg'), 'local'); fs.rmSync(path.join(dir, '.gitignore'));
+  sh(dir, 'config', 'core.excludesFile', path.join(tmp, 'globalignore')); fs.writeFileSync(path.join(tmp, 'globalignore'), 'secret.cfg\n');
+  await runSync();
+  let r = lastResults().find(x => x.name === 'kappa');
+  assert.equal(r.state, 'Paused');
+  assert.equal(r.info.code, 'declined', JSON.stringify(r));
+  assert.deepEqual(r.info.files.map(f => f.path), ['secret.cfg']);
+  const out = await syncfix.fix({ name: 'kappa', action: 'moveout', paths: ['secret.cfg'] });
+  assert.equal(out.result.state, 'Updated', JSON.stringify(out));
+  assert.equal(fs.readFileSync(path.join(root, '_Set aside', 'kappa', 'secret.cfg'), 'utf8'), 'local');
+
+  fs.writeFileSync(path.join(dir, 'mine.txt'), '1'); sh(dir, 'add', '-A'); sh(dir, 'commit', '-q', '-m', 'my local work');
+  pushChange('kappa', 'later.txt');
+  await runSync();
+  r = lastResults().find(x => x.name === 'kappa');
+  assert.equal(r.info.code, 'commits');
+  assert.match(r.info.commits[0], /my local work/);
+
+  sh(dir, 'reset', '-q', '--hard', 'origin/main'); sh(dir, 'checkout', '-q', '-b', 'side');
+  await runSync();
+  r = lastResults().find(x => x.name === 'kappa');
+  assert.equal(r.info.code, 'branch'); assert.equal(r.info.onBranch, 'side'); assert.equal(r.info.clean, true);
+  const sw = await syncfix.fix({ name: 'kappa', action: 'switch', branch: 'main' });
+  assert.match(sw.result.state, /Updated|Current/, JSON.stringify(sw));
+  assert.equal(sh(dir, 'rev-parse', '--abbrev-ref', 'HEAD'), 'main');
+});
+
+test('programs Streamline starts never inherit its PORT or private settings', () => {
+  const { childEnv } = require('../lib/proc');
+  const saved = process.env.PORT; process.env.PORT = '4545';
+  const env = childEnv({ X: '1' });
+  if (saved === undefined) delete process.env.PORT; else process.env.PORT = saved;
+  assert.equal(env.PORT, undefined);
+  assert.equal(Object.keys(env).some(k => /^STREAMLINE_/.test(k)), false);
+  assert.equal(env.X, '1');
+});

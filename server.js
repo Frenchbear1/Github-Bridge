@@ -9,6 +9,7 @@ const repo = require('./lib/repo');
 const clone = require('./lib/clone');
 const upload = require('./lib/upload');
 const sync = require('./lib/sync');
+const syncfix = require('./lib/syncfix');
 const auth = require('./lib/auth');
 const picker = require('./lib/picker');
 const launch = require('./lib/launch');
@@ -24,7 +25,7 @@ const { gitExe, ghExe, run, git: gitRun } = require('./lib/proc');
 const { IS_WIN } = require('./lib/util');
 const pkg = require('./package.json');
 
-const PORT = Number(process.env.PORT) || 4545;
+let PORT = Number(process.env.PORT) || 4545;
 const HOST = '127.0.0.1'; // loopback only: never reachable from the network
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.png': 'image/png' };
@@ -114,6 +115,7 @@ function validSettings(b) {
 }
 
 const routes = {
+  'GET /api/ping': async () => ({ app: 'streamline', version: pkg.version }),
   'GET /api/state': async () => {
     const settings = store.getSettings();
     const [a, g] = await Promise.all([auth.status(false), run(gitExe(), ['--version'])]);
@@ -195,7 +197,23 @@ const routes = {
     return { ok: true };
   },
 
-  'POST /api/sync': async () => ({ jobId: sync.startSync() })
+  'POST /api/sync': async () => ({ jobId: sync.startSync() }),
+  'POST /api/sync/retry': async ({ body }) => {
+    if (jobs.runningOfType('sync')) throw new HttpError(409, 'Wait for the update to finish.');
+    return { result: await sync.retryOne(String(body.name || '')) };
+  },
+  'POST /api/sync/fix': async ({ body }) => {
+    if (jobs.runningOfType('sync')) throw new HttpError(409, 'Wait for the update to finish.');
+    return syncfix.fix({ name: String(body.name || ''), action: String(body.action || ''), paths: body.paths, branch: body.branch });
+  },
+  'POST /api/sync/reveal': async ({ body }) => {
+    const root = sync.loadConfig().root;
+    const name = String(body.name || '');
+    if (!/^[A-Za-z0-9_.-]+$/.test(name) || name === '.' || name === '..') throw new HttpError(400, 'Unknown project.');
+    const dir = body.setAside ? path.join(root, syncfix.SET_ASIDE, name) : path.join(root, name);
+    openFolder(dir);
+    return { ok: true };
+  }
 };
 
 async function handleApi(req, res, url) {
@@ -324,13 +342,32 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-function openBrowser(port) { openUrl(`http://localhost:${port}/`); }
+function openBrowser(port) { openUrl(`http://127.0.0.1:${port}/`); }
 
-server.on('error', e => {
+// Is the program on this port really Streamline? (A project's dev server could be sitting on it.)
+function isStreamline(port) {
+  return new Promise(resolve => {
+    const req = http.get({ host: '127.0.0.1', port, path: '/api/ping', headers: { Host: `127.0.0.1:${port}` }, timeout: 1500 }, res => {
+      let b = ''; res.on('data', d => { b += d; }); res.on('end', () => { try { resolve(JSON.parse(b).app === 'streamline'); } catch { resolve(false); } });
+    });
+    req.on('error', () => resolve(false)); req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+let portTries = 0;
+
+server.on('error', async e => {
   if (e.code === 'EADDRINUSE') {
-    console.log(`Streamline is already running on port ${PORT}.`);
-    if (process.argv.includes('--open')) openBrowser(PORT);
-    process.exit(0);
+    if (await isStreamline(PORT)) {
+      console.log(`Streamline is already running on port ${PORT}.`);
+      if (process.argv.includes('--open')) openBrowser(PORT);
+      return process.exit(0);
+    }
+    if (++portTries <= 30) {
+      console.log(`Port ${PORT} is used by another program; trying ${PORT + 1}.`);
+      PORT += 1;
+      process.env.PORT = String(PORT);
+      return server.listen(PORT, HOST);
+    }
   }
   console.error(e);
   process.exit(1);
@@ -338,6 +375,6 @@ server.on('error', e => {
 
 server.listen(PORT, HOST, () => {
   if (process.argv.includes('--autoquit')) watchForClose();
-  console.log(`Streamline ${pkg.version} running at http://localhost:${PORT}/  (git: ${gitExe()}, gh: ${ghExe()})`);
+  console.log(`Streamline ${pkg.version} running at http://127.0.0.1:${PORT}/  (git: ${gitExe()}, gh: ${ghExe()})`);
   if (process.argv.includes('--open')) openBrowser(PORT);
 });

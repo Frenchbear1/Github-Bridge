@@ -10,8 +10,9 @@ const net = require('net');
 const os = require('os');
 const path = require('path');
 
-const PORT = Number(process.env.PORT) || 4545;
-const ORIGIN = `http://localhost:${PORT}`;
+let PORT = Number(process.env.PORT) || 4545;
+// 127.0.0.1, not "localhost": a project server listening on IPv6 (::1) can never be mistaken for Streamline.
+let ORIGIN = `http://127.0.0.1:${PORT}`;
 const SMOKE = process.argv.includes('--smoke-test');
 const ICON = path.join(__dirname, 'icon.png');
 let win = null, tray = null, quitting = false;
@@ -24,7 +25,7 @@ const portOpen = port => new Promise(resolve => {
 });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const get = p => new Promise((resolve, reject) => {
-  http.get(ORIGIN + p, { headers: { Host: `localhost:${PORT}`, 'X-Streamline': '1' } }, res => { let b = ''; res.on('data', d => { b += d; }); res.on('end', () => resolve({ status: res.statusCode, body: b })); }).on('error', reject);
+  http.get(ORIGIN + p, { headers: { Host: `127.0.0.1:${PORT}`, 'X-Streamline': '1' } }, res => { let b = ''; res.on('data', d => { b += d; }); res.on('end', () => resolve({ status: res.statusCode, body: b })); }).on('error', reject);
 });
 
 // Brings over projects/settings from a browser-version install (its data folder) the first time this app runs.
@@ -50,8 +51,22 @@ function importOldData(dataDir) {
   }
 }
 
+const isStreamline = port => new Promise(resolve => {
+  const req = http.get({ host: '127.0.0.1', port, path: '/api/ping', headers: { Host: `127.0.0.1:${port}` }, timeout: 1500 }, res => {
+    let b = ''; res.on('data', d => { b += d; }); res.on('end', () => { try { resolve(JSON.parse(b).app === 'streamline'); } catch { resolve(false); } });
+  });
+  req.on('error', () => resolve(false)); req.on('timeout', () => { req.destroy(); resolve(false); });
+});
+
 async function ensureServer() {
-  if (await portOpen(PORT)) return; // a Streamline server is already running (for example from Start-Streamline.vbs): use it
+  // Reuse a Streamline that is already running (for example from Start-Streamline.vbs), but never some other
+  // program that happens to sit on the port: then Streamline moves to the next free port.
+  for (let tries = 0; await portOpen(PORT); tries++) {
+    if (await isStreamline(PORT)) { ORIGIN = `http://127.0.0.1:${PORT}`; return; }
+    if (tries >= 30) throw new Error('Could not find a free port for Streamline.');
+    PORT += 1;
+  }
+  ORIGIN = `http://127.0.0.1:${PORT}`;
   const dataDir = path.join(app.getPath('userData'), 'data');
   process.env.STREAMLINE_DATA = dataDir;
   process.env.PORT = String(PORT);
@@ -64,8 +79,11 @@ async function ensureServer() {
 const liveJobs = () => { try { return require('./server/lib/jobs').list().filter(j => j.status === 'running' || j.live); } catch { return []; } };
 function stopEverythingAndQuit() {
   quitting = true;
-  try { const jobs = require('./server/lib/jobs'); for (const j of liveJobs()) jobs.cancel(j.id); } catch { /* nothing to stop */ }
-  setTimeout(() => app.quit(), 400);
+  try {
+    require('./server/lib/proc').setSyncKill(true); // finish every kill before the app exits
+    const jobs = require('./server/lib/jobs'); for (const j of liveJobs()) jobs.cancel(j.id);
+  } catch { /* nothing to stop */ }
+  setTimeout(() => app.quit(), 600);
 }
 
 function showWindow() { if (!win) return createWindow(); if (win.isMinimized()) win.restore(); win.show(); win.focus(); }

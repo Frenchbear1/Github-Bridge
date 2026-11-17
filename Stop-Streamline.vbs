@@ -3,7 +3,7 @@ Option Explicit
 Dim http
 On Error Resume Next
 Set http = CreateObject("MSXML2.XMLHTTP")
-http.Open "POST", "http://localhost:4545/api/quit", False
+http.Open "POST", "http://127.0.0.1:4545/api/quit", False
 http.setRequestHeader "X-Streamline", "1"
 http.Send
 If Err.Number <> 0 Then

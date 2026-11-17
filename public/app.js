@@ -93,6 +93,75 @@ function renderSyncBtn() {
   renderSyncBar();
 }
 
+let syncPinned = null;
+const syncOpen = new Set();     // paused projects whose file list is expanded
+const syncBusy = new Set();     // projects with a fix in progress
+const KIND = { new: 'New file', edited: 'Edited', deleted: 'Deleted', added: 'New (staged)', renamed: 'Renamed', conflict: 'Conflict', blocking: 'In the way', ignored: 'Ignored file' };
+
+async function syncAction(r, body, confirmText) {
+  if (confirmText && !confirm(confirmText)) return;
+  syncBusy.add(r.name); renderSyncBar();
+  try {
+    const out = await api('POST', body ? '/api/sync/fix' : '/api/sync/retry', body ? { name: r.name, ...body } : { name: r.name });
+    const res = out.result || {};
+    if (res.state !== 'Paused' && res.state !== 'Error') syncOpen.delete(r.name);
+    if (out.done && out.done.length) toast(out.done.slice(0, 4).join('\n') + (out.done.length > 4 ? `\n…and ${out.done.length - 4} more` : '') + `\n${r.name}: ${res.state === 'Updated' || res.state === 'Current' || res.state === 'Skipped' ? 'now up to date' : res.detail}`);
+  } catch (e) { alert(e.message); }
+  syncBusy.delete(r.name); renderSyncBar();
+}
+
+function toast(text) {
+  const t = h('div', { class: 'toast' }, text);
+  document.body.append(t);
+  setTimeout(() => t.remove(), 6000);
+}
+
+function pausedRow(r) {
+  const info = r.info || {};
+  const files = info.files || [];
+  const busy = syncBusy.has(r.name);
+  const open = syncOpen.has(r.name);
+  const reveal = setAside => api('POST', '/api/sync/reveal', { name: r.name, setAside }).catch(e => alert(e.message));
+  const toggle = files.length || (info.commits || []).length
+    ? h('button', { class: 'link-btn', onclick: () => { open ? syncOpen.delete(r.name) : syncOpen.add(r.name); renderSyncBar(); } },
+        open ? 'Hide details' : files.length ? `Show ${files.length + (info.moreFiles || 0)} file${files.length + (info.moreFiles || 0) === 1 ? '' : 's'}` : 'Show commits')
+    : null;
+  const head = h('div', { class: 'sb-row' },
+    h('span', { class: 'sb-name' }, r.name),
+    h('span', { class: 'sb-why' }, r.detail, ' ', toggle),
+    h('span', { class: 'sb-acts' },
+      busy ? h('span', { class: 'spin' }) : null,
+      info.code === 'branch' && info.clean && info.expected ? h('button', { class: 'btn small', disabled: busy, onclick: () => syncAction(r, { action: 'switch', branch: info.expected }) }, `Switch to ${info.expected}`) : null,
+      h('button', { class: 'btn small ghost', onclick: () => reveal(false) }, 'Open folder'),
+      h('button', { class: 'btn small', disabled: busy, title: 'Check this project again', onclick: () => syncAction(r) }, 'Retry')));
+  if (!open) return head;
+  const detail = h('div', { class: 'sb-files' });
+  if (files.length) {
+    const paths = files.map(f => f.path);
+    detail.append(
+      h('div', { class: 'sb-fhead' },
+        h('span', {}, 'These are different from GitHub. Moving them out puts them in ', h('code', {}, `_Set aside\\${r.name}`), ' (in your projects folder, above this project), then updates it.'),
+        h('span', { class: 'sb-acts' },
+          h('button', { class: 'btn small', disabled: busy, onclick: () => syncAction(r, { action: 'moveout', paths }) }, 'Move all out & update'),
+          h('button', { class: 'btn small danger', disabled: busy, onclick: () => syncAction(r, { action: 'delete', paths }, `Send all ${paths.length} files in ${r.name} to the Recycle Bin and update it?\n\nEdited files go back to the GitHub version.`) }, 'Delete all & update'),
+          h('button', { class: 'btn small ghost', onclick: () => reveal(true) }, 'Open set-aside folder'))),
+      ...files.map(f => h('div', { class: 'sb-file' },
+        h('span', { class: 'kind k-' + f.kind }, KIND[f.kind] || f.kind),
+        h('code', { class: 'fpath', title: f.from ? `was ${f.from}` : f.path }, f.from ? `${f.from} \u2192 ${f.path}` : f.path),
+        h('span', { class: 'sb-acts' },
+          f.kind === 'deleted'
+            ? h('button', { class: 'btn small', disabled: busy, title: 'Put back the GitHub version', onclick: () => syncAction(r, { action: 'moveout', paths: [f.path] }) }, 'Restore')
+            : h('button', { class: 'btn small', disabled: busy, title: 'Move to the set-aside folder (edited files go back to the GitHub version)', onclick: () => syncAction(r, { action: 'moveout', paths: [f.path] }) }, 'Move out'),
+          f.kind === 'deleted' ? null : h('button', { class: 'btn small ghost danger', disabled: busy, title: 'Send to the Recycle Bin', onclick: () => syncAction(r, { action: 'delete', paths: [f.path] }, `Send ${f.path} to the Recycle Bin?`) }, 'Delete')))));
+    if (info.moreFiles) detail.append(h('div', { class: 'hint' }, `…and ${info.moreFiles} more not shown. "Move all out" handles the ones listed; retry to see the rest.`));
+  }
+  if ((info.commits || []).length) {
+    detail.append(h('div', { class: 'sb-fhead' }, h('span', {}, 'Commits you made here that are not on GitHub. Upload them from the project (\u2191 Upload) or keep them; Streamline will not overwrite them.')),
+      ...info.commits.map(c => h('div', { class: 'sb-file' }, h('code', { class: 'fpath' }, c))));
+  }
+  return h('div', { class: 'sb-pgroup' }, head, detail);
+}
+
 // A slim status bar under the header: live progress while updating, then a plain-language result.
 const syncDismissed = new Set();
 function renderSyncBar() {
@@ -100,7 +169,7 @@ function renderSyncBar() {
   const syncs = [...jobs.values()].filter(j => j.meta.type === 'sync').sort((a, b) => b.meta.startedAt.localeCompare(a.meta.startedAt));
   const j = syncs[0];
   const m = j && j.meta;
-  const fresh = m && (m.status === 'running' || (!syncDismissed.has(m.id) && Date.now() - new Date(m.finishedAt || m.startedAt).getTime() < 15 * 60 * 1000 && j.seenRunning));
+  const fresh = m && (m.status === 'running' || syncPinned === m.id || (!syncDismissed.has(m.id) && Date.now() - new Date(m.finishedAt || m.startedAt).getTime() < 15 * 60 * 1000 && j.seenRunning));
   if (m && m.status === 'running') j.seenRunning = true;
   if (!fresh) { bar.classList.add('hidden'); bar.replaceChildren(); return; }
   bar.classList.remove('hidden');
@@ -124,7 +193,7 @@ function renderSyncBar() {
     if (!items.length) return null;
     // Good news is a compact list of names; things that need you get one line each with the reason.
     const body = (state === 'Paused' || state === 'Error')
-      ? items.map(r => h('div', { class: 'sb-row' }, h('span', { class: 'sb-name' }, r.name), h('span', { class: 'sb-why' }, r.detail)))
+      ? items.map(r => pausedRow(r))
       : [h('div', { class: 'sb-names' }, items.map(r => h('span', { class: 'sb-pill' }, r.name)))];
     return h('div', { class: 'sb-group ' + cls }, h('div', { class: 'sb-gtitle' }, `${title} (${items.length})`), ...body);
   };
@@ -134,7 +203,7 @@ function renderSyncBar() {
     h('div', { class: 'sb-top' },
       h('strong', {}, m.status === 'cancelled' ? 'Update cancelled' : m.status === 'error' ? 'Update failed' : (m.status === 'warning' ? 'Update finished with problems' : ((s.paused || s.updated || s.cloned) ? 'Update finished' : 'Everything is up to date'))),
       h('span', { class: 'sb-sum' }, m.summary),
-      h('button', { class: 'btn small ghost', title: 'Dismiss', onclick: () => { syncDismissed.add(m.id); renderSyncBar(); } }, '\u2715')),
+      h('button', { class: 'btn small ghost', title: 'Dismiss', onclick: () => { syncDismissed.add(m.id); if (syncPinned === m.id) syncPinned = null; renderSyncBar(); } }, '\u2715')),
     detailed ? h('div', { class: 'sb-groups' }, group('Error', 'Could not update', 'err'), group('Paused', 'Paused to protect your work', 'warn'), group('Updated', 'Updated', 'ok'), group('Cloned', 'Downloaded', 'ok')) : null);
 }
 
@@ -652,7 +721,8 @@ function renderJobs() {
       h('div', { class: 'job-actions' },
         running ? h('button', { class: 'btn small', onclick: () => api('POST', `/api/jobs/${m.id}/cancel`) }, 'Cancel') : null,
         h('button', { class: 'link-btn', onclick: () => { j.open = !j.open; if (j.open && !j.loaded) loadLines(j); renderJobs(); } }, j.open ? 'Hide output' : 'Show output'),
-        m.link ? h('a', { href: m.link, target: '_blank', rel: 'noopener' }, m.linkLabel || 'View on GitHub') : null),
+        m.link ? h('a', { href: m.link, target: '_blank', rel: 'noopener' }, m.linkLabel || 'View on GitHub') : null,
+        m.type === 'sync' && !running && (m.results || []).length ? h('button', { class: 'link-btn', onclick: () => { syncPinned = m.id; syncDismissed.delete(m.id); renderSyncBar(); window.scrollTo({ top: 0, behavior: 'smooth' }); } }, 'Show results') : null),
       log);
     const logEl = el.querySelector('.log');
     if (logEl) logEl.scrollTop = logEl.scrollHeight;
