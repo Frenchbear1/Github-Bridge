@@ -7,3 +7,6 @@ Thumbs.db
 desktop/node_modules/
 desktop/dist/
 desktop/server/
+
+# Built installers are too big for git (100 MB limit); get them from Releases
+*.exe
