@@ -28,8 +28,8 @@ Then get Streamline:
 
 ## Start (no Command Prompt window)
 
-- **Double-click `Start-Streamline.vbs`** (or `Start-Streamline.bat`, which starts the server in a minimized window instead of a hidden one). Nothing flashes and no console stays open: the server runs hidden and your browser opens to `http://localhost:4545`.
-- **Quit** with the **Quit** button in the top right of the app (or double-click `Stop-Streamline.vbs`).
+- **Double-click `Start-Streamline.vbs`**. Nothing flashes and no console stays open: the server runs hidden and your browser opens to `http://localhost:4545`.
+- **Quit by closing the browser tab.** About 12 seconds after the last Streamline tab closes, the server stops by itself (a reload or quick reopen keeps it running). It will not stop while an upload, clone, refresh or a project started with Play is still running; reopening `Start-Streamline.vbs` just reopens the app. `Stop-Streamline.vbs` stops it immediately.
 - To start it automatically at sign-in, press `Win + R`, type `shell:startup`, and put a shortcut to `Start-Streamline.vbs` in that folder.
 - If something goes wrong, the server's messages are in `data\server.log`. For a visible window while troubleshooting, use `Start-Streamline-Debug.bat`.
 

@@ -1,5 +1,5 @@
 ' Starts Streamline with NO console window and opens it in your browser.
-' Double-click this file. Quit from the "Quit" button inside the app (or run Stop-Streamline.vbs).
+' Double-click this file. Closing the browser tab stops Streamline (or run Stop-Streamline.vbs).
 Option Explicit
 Dim sh, fso, dir, rc, log
 Set sh = CreateObject("WScript.Shell")
@@ -20,4 +20,4 @@ If fso.FileExists(log) Then
 End If
 
 ' Window style 0 = hidden. Output goes to data\server.log for troubleshooting.
-sh.Run "cmd /c node server.js --open >> ""data\server.log"" 2>&1", 0, False
+sh.Run "cmd /c node server.js --open --autoquit >> ""data\server.log"" 2>&1", 0, False

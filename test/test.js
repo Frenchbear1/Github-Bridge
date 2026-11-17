@@ -300,3 +300,25 @@ test('sync with a missing script gives a helpful error', async () => {
   assert.equal(r.status, 400);
   assert.match(r.body.error, /Sync script not found/);
 });
+
+test('closing the last browser tab stops the server; a quick reload keeps it alive', async () => {
+  const { spawn } = require('node:child_process');
+  const http = require('node:http');
+  const port = 4790 + Math.floor(Math.random() * 100);
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js'), '--autoquit'], {
+    env: { ...process.env, PORT: String(port), STREAMLINE_DATA: fs.mkdtempSync(path.join(os.tmpdir(), 'sl-aq-')), STREAMLINE_AUTOQUIT_GRACE_MS: '2000', STREAMLINE_AUTOQUIT_FIRST_MS: '60000' }, stdio: 'ignore'
+  });
+  let exited = false; child.on('exit', () => { exited = true; });
+  const connect = () => new Promise((res, rej) => { const r = http.get({ port, host: '127.0.0.1', path: '/api/events', headers: { Host: `localhost:${port}` } }, resp => res({ r, resp })); r.on('error', rej); });
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  try {
+    let c; for (let i = 0; i < 30; i++) { try { c = await connect(); break; } catch { await sleep(200); } }
+    assert.ok(c, 'server did not start');
+    c.r.destroy(); await sleep(800);                       // tab reload: gone for less than the grace period
+    c = await connect(); await sleep(3500);
+    assert.equal(exited, false, 'stopped while a tab was open');
+    c.r.destroy();                                         // tab closed for good
+    for (let i = 0; i < 40 && !exited; i++) await sleep(250);
+    assert.equal(exited, true, 'did not stop after the tab closed');
+  } finally { if (!exited) child.kill(); }
+});

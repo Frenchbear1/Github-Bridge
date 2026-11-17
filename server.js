@@ -235,7 +235,27 @@ async function handleApi(req, res, url) {
   throw new HttpError(404, 'Not found.');
 }
 
+// Closing the browser tab quits Streamline (when started with --autoquit, which the launchers do).
+// Every open tab holds one event stream; when the last one has been gone for a grace period (so a reload or a
+// quick reopen keeps it alive) and nothing is running, the server exits.
+const streams = new Set();
+function watchForClose() {
+  const grace = Number(process.env.STREAMLINE_AUTOQUIT_GRACE_MS) || 12000;
+  const firstGrace = Number(process.env.STREAMLINE_AUTOQUIT_FIRST_MS) || 120000;
+  let everConnected = false, emptySince = Date.now(), last = Date.now();
+  setInterval(() => {
+    const now = Date.now();
+    const resumed = now - last > 6000; // the computer slept; give the tab time to reconnect
+    last = now;
+    if (streams.size) { everConnected = true; emptySince = now; return; }
+    if (resumed) emptySince = now;
+    if (jobs.list().some(j => j.status === 'running')) { emptySince = now; return; } // something is still running
+    if (now - emptySince >= (everConnected ? grace : firstGrace)) { console.log('Browser tab closed. Streamline is stopping.'); process.exit(0); }
+  }, 1000).unref();
+}
+
 function handleEvents(req, res) {
+  streams.add(res);
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
   res.write('retry: 2000\n\n');
   const onJob = j => res.write(`event: job\ndata: ${JSON.stringify(j)}\n\n`);
@@ -243,7 +263,7 @@ function handleEvents(req, res) {
   const onCleared = () => res.write('event: cleared\ndata: {}\n\n');
   jobs.bus.on('job', onJob); jobs.bus.on('line', onLine); jobs.bus.on('cleared', onCleared);
   const ping = setInterval(() => res.write(': ping\n\n'), 25000);
-  req.on('close', () => { clearInterval(ping); jobs.bus.off('job', onJob); jobs.bus.off('line', onLine); jobs.bus.off('cleared', onCleared); });
+  req.on('close', () => { streams.delete(res); clearInterval(ping); jobs.bus.off('job', onJob); jobs.bus.off('line', onLine); jobs.bus.off('cleared', onCleared); });
 }
 
 function serveStatic(req, res, url) {
@@ -291,6 +311,7 @@ server.on('error', e => {
 });
 
 server.listen(PORT, HOST, () => {
+  if (process.argv.includes('--autoquit')) watchForClose();
   console.log(`Streamline ${pkg.version} running at http://localhost:${PORT}/  (git: ${gitExe()}, gh: ${ghExe()})`);
   if (process.argv.includes('--open')) openBrowser(PORT);
 });

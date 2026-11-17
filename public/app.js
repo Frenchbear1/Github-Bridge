@@ -595,11 +595,6 @@ function renderJobs() {
   }));
 }
 
-$('quitBtn').addEventListener('click', async () => {
-  try { await api('POST', '/api/quit'); } catch { /* server is already going down */ }
-  document.body.replaceChildren(h('div', { class: 'empty', style: 'padding:80px 20px;font-size:16px' }, 'Streamline has stopped. You can close this tab. Open Start-Streamline.vbs to run it again.'));
-});
-
 $('clearBtn').addEventListener('click', async () => { await api('POST', '/api/jobs/clear'); });
 
 function connectEvents() {
