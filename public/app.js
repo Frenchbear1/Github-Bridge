@@ -152,7 +152,7 @@ function renderProjects() {
         run && run.link ? h('a', { class: 'btn small', href: run.link, target: '_blank', rel: 'noopener' }, 'Open') : null,
         h('button', { class: 'btn small', onclick: () => { $('upRepo').value = p.id; showTab('upload'); schedulePreview(); } }, 'Upload'),
         h('button', { class: 'btn small', onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/pull`)).jobId); } catch (e) { alert(e.message); } } }, 'Pull'),
-        h('button', { class: 'btn small', onclick: () => api('POST', `/api/projects/${p.id}/open`).catch(e => alert(e.message)) }, 'Folder'),
+        h('button', { class: 'btn small', title: 'Open in File Explorer, VS Code, Notepad and other installed programs', onclick: () => openWith(p) }, 'Open in\u2026'),
         rm)));
   }
 }
@@ -270,6 +270,25 @@ $('dlgReset').addEventListener('click', async () => {
   $('playDlg').close(); await loadState();
 });
 
+
+/* ---------- open in editor ---------- */
+async function openWith(p) {
+  $('openTitle').textContent = `Open ${p.name} in\u2026`;
+  const list = $('openList'); list.replaceChildren(); $('openMsg').classList.add('hidden');
+  list.append(h('div', { class: 'hint' }, 'Looking for installed programs\u2026'));
+  if (!$('openDlg').open) $('openDlg').showModal();
+  let eds = [];
+  try { eds = (await api('GET', '/api/editors')).editors; } catch { /* folder still works */ }
+  list.replaceChildren();
+  const go = async (editor, label) => {
+    try { await api('POST', `/api/projects/${p.id}/open`, editor ? { editor } : {}); $('openDlg').close(); }
+    catch (e) { notice($('openMsg'), `Could not open ${label}: ${e.message}`, 'err'); }
+  };
+  list.append(h('button', { class: 'btn', onclick: () => go(null, 'the folder') }, 'File Explorer', h('span', { class: 'sub' }, 'the project folder')));
+  for (const e of eds) list.append(h('button', { class: 'btn', onclick: () => go(e.id, e.label) }, e.label,
+    e.id === 'notepad' || e.id === 'notepadpp' ? h('span', { class: 'sub' }, 'opens the main file') : null));
+}
+$('openClose').addEventListener('click', () => $('openDlg').close());
 
 /* ---------- health check ---------- */
 function renderHealth() {

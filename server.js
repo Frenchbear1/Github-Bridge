@@ -14,6 +14,7 @@ const picker = require('./lib/picker');
 const launch = require('./lib/launch');
 const custom = require('./lib/custom');
 const health = require('./lib/health');
+const editors = require('./lib/editors');
 const { buildPrompt } = require('./lib/prompt');
 const { openUrl, openFolderWindow } = require('./lib/open');
 const { DEFAULTS } = require('./lib/exclusions');
@@ -158,6 +159,7 @@ const routes = {
     return { plans, running };
   },
 
+  'GET /api/editors': async () => ({ editors: editors.list(true).map(({ id, label }) => ({ id, label })) }),
   'GET /api/health': async () => health.status(),
   'POST /api/health/run': async ({ body }) => ({ jobId: health.startCheck(Array.isArray(body.projectIds) ? body.projectIds.map(String) : null) }),
   'GET /api/health/prompt': async () => health.fixPrompt(),
@@ -212,7 +214,9 @@ async function handleApi(req, res, url) {
     return send(res, 200, { stopped: launch.stop(findProject(m[1])) });
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/open$/)) && req.method === 'POST') {
-    openFolder(findProject(m[1]).localPath);
+    const project = findProject(m[1]);
+    if (body.editor) return send(res, 200, { ok: true, ...editors.openIn(String(body.editor), project.localPath) });
+    openFolder(project.localPath);
     return send(res, 200, { ok: true });
   }
   if ((m = url.pathname.match(/^\/api\/jobs\/([a-f0-9]+)\/lines$/)) && req.method === 'GET') {
