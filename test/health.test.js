@@ -97,3 +97,21 @@ test('desktop apps get a dry run: setup runs, but the app is never launched', as
   assert.match(r.note, /not launched|Setup finished/);
   assert.equal(fs.existsSync(path.join(p.localPath, 'LAUNCHED')), false);
 });
+
+test('interactive command-line tools are not run hidden: check is a dry run, Play opens a console window', async () => {
+  const p = mk('Typing Tool', { 'requirements.txt': '', 'tool.py': 'url = input("Paste URL: ")\nprint(url)\n' });
+  store.saveProjects([...store.getProjects(), p]);
+  const custom = require('../lib/custom');
+  custom.save(p.id, { streamline: 1, kind: 'command', needs: [], setup: [], run: { cmd: 'python tool.py', cwd: '', env: {} }, openUrl: '', opensWindow: false, notes: '' });
+  assert.equal(launch.detect(p).interactive, true);
+  const r = await launch.check(p);
+  assert.equal(r.status, 'ok', JSON.stringify(r)); assert.match(r.note, /waits for you to type/);
+  const log = path.join(tmp, 'open.log'); process.env.STREAMLINE_OPEN_LOG = log;
+  const j = await waitJob(launch.start(p));
+  delete process.env.STREAMLINE_OPEN_LOG;
+  assert.equal(j.status, 'success'); assert.match(fs.readFileSync(log, 'utf8'), /console:/);
+  // a web server that happens to call input() is not treated as interactive
+  const w = mk('Web With Input', { 'app.py': 'from flask import Flask\nx = input("q")\n' });
+  custom.save(w.id, { streamline: 1, kind: 'command', needs: [], setup: [], run: { cmd: 'python app.py', cwd: '', env: {} }, openUrl: '', opensWindow: false, notes: '' });
+  assert.equal(launch.detect(w).interactive, false);
+});

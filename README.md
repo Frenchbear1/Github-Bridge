@@ -65,6 +65,8 @@ Every saved project shows how Streamline will run it. It checks, in this order:
 | A plain HTML project | Opens `index.html` directly. If the page needs a server (ES modules, `fetch`, service worker, root-relative links), Streamline serves the folder on a local port instead and opens that; **Stop** shuts it down. |
 | Nothing it can identify | Shows "No run step" instead of guessing. |
 
+**Command-line tools that wait for typing** (for example a Python script that calls `input()`) are detected and opened in their own console window that stays open, because a hidden run has no keyboard and would fail with an input error. Check all projects only runs their setup, never the tool itself.
+
 While a project runs, its output streams into Activity, the row shows **running**, and **Stop** ends the whole process tree. If a needed tool is missing (Node, Python, .NET...), the output says exactly what to install, with the `winget` command.
 
 **Generated launchers stay out of your way.** For projects that need one, Streamline writes `Streamline-Play.bat` into the project folder, so you can also double-click it in Explorer. It adds that file (plus `node_modules/`, `.venv/` and similar, when your `.gitignore` does not already cover them) to the repository's local `.git/info/exclude`. That file is never committed or pushed, so these files do not appear as "untracked", and your sync script will not pause the project. Dependency installs never create or change a lock file, for the same reason. Streamline never overwrites a launcher it did not write, and never uploads `Streamline-Play.bat`.
