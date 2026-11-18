@@ -154,9 +154,32 @@
   </div>
   <div class="dlg-foot"><span class="grow"></span><button id="fixSave" class="btn primary" disabled>Apply and re-check</button></div>
 </dialog>
-<dialog id="openDlg" class="small">
-  <div class="dlg-head"><h2 id="openTitle">Open</h2><button id="openClose" class="btn small ghost" title="Close">&#10005;</button></div>
-  <div class="dlg-body"><div id="openList" class="openlist"></div><div id="openMsg" class="notice hidden"></div></div>
+<dialog id="shareDlg">
+  <div class="dlg-head"><h2 id="shTitle">Share</h2><button id="shClose" class="btn small ghost" title="Close">&#10005;</button></div>
+  <div class="dlg-body">
+    <p class="hint">Streamline and ChatGPT make one web page that walks people through getting it and using it, the easiest way possible. You send them that page (and the zip, if you share one).</p>
+    <div class="step"><div class="stepn">1</div><div class="stepc">
+      <strong>What do you want to share?</strong>
+      <div id="shItems" class="shitems"></div>
+      <div id="shSimple" class="notice hidden">Sharing just a website? You may not need a page at all: <button id="shSimpleCopy" class="btn small">Copy the link</button> and send it. Or continue for a page with instructions.</div>
+      <div class="row shwho">
+        <label>They use <select id="shDevice"><option value="windows">a Windows PC</option><option value="mac">a Mac</option><option value="phone">a phone or tablet</option><option value="any">Not sure / a mix</option></select></label>
+        <input id="shNote" type="text" placeholder="Optional note for ChatGPT, e.g. &quot;for my dad, he just wants to use it for practice&quot;" class="grow">
+      </div>
+    </div></div>
+    <div class="step"><div class="stepn">2</div><div class="stepc">
+      <strong>Copy the prompt and give it to ChatGPT</strong>
+      <div class="row"><button id="shCopy" class="btn primary">Copy prompt for ChatGPT</button><a class="btn" href="https://chatgpt.com/" target="_blank" rel="noopener">Open ChatGPT</a><span id="shCopied" class="hint"></span></div>
+      <details class="more"><summary>See exactly what gets copied</summary><textarea id="shPrompt" readonly rows="8" spellcheck="false"></textarea></details>
+      <small class="hint">It includes the links, release files, how the project runs and its README. Secrets such as .env files are left out.</small>
+    </div></div>
+    <div class="step"><div class="stepn">3</div><div class="stepc">
+      <strong>Paste ChatGPT's reply here</strong>
+      <textarea id="shReply" rows="6" spellcheck="false" placeholder="Paste the whole reply. Streamline takes the web page out of it."></textarea>
+      <div class="row"><button id="shSave" class="btn primary" disabled>Save share page</button></div>
+      <div id="shResult"></div>
+    </div></div>
+  </div>
 </dialog>
 <script src="app.js"></script>
 </body>

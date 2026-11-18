@@ -276,3 +276,56 @@ test('GitHub links and releases are loaded, and Play can be routed to them', asy
   links.setTarget('aaaaaaaaaa', 'local');
   assert.equal(links.targetOf('aaaaaaaaaa'), 'local');
 });
+
+/* ---------- share ---------- */
+test('Share: offers the easiest option, builds an honest prompt, zips the project, saves the page', async () => {
+  const links = require('../lib/links');
+  const share = require('../lib/share');
+  fs.writeFileSync(path.join(tmp, 'repos.json'), JSON.stringify([
+    { name: 'alpha', homepage: 'https://alpha.example.com', releases: [{ tag: 'v2.0', assets: ['Alpha-Setup.exe'] }] },
+    { name: 'beta' }
+  ]));
+  const projects = store.getProjects();
+  await links.refresh();
+  assert.equal(links.targetOf('bbbbbbbbbb'), 'local');
+  const st = store.read('play-targets.json', {}); delete st.aaaaaaaaaa; store.write('play-targets.json', st);
+  assert.equal(links.targetOf('aaaaaaaaaa'), 'homepage', 'a project with a website opens it by default');
+
+  const alpha = projects.find(p => p.id === 'aaaaaaaaaa');
+  fs.mkdirSync(path.join(alpha.localPath, 'node_modules', 'x'), { recursive: true });
+  fs.writeFileSync(path.join(alpha.localPath, 'node_modules', 'x', 'big.js'), 'x');
+  fs.writeFileSync(path.join(alpha.localPath, '.env'), 'TOKEN=secret');
+  fs.mkdirSync(path.join(alpha.localPath, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(alpha.localPath, 'src', 'app.js'), 'console.log(1)\n'.repeat(200));
+
+  const o = share.options(alpha);
+  assert.deepEqual(o.items.map(i => i.key), ['website', 'release', 'code', 'zip']);
+  assert.deepEqual(o.recommended, ['website']);
+
+  const pr = await share.buildPrompt(alpha, { items: ['website', 'release', 'zip'], device: 'windows', note: 'for my dad' });
+  assert.match(pr.prompt, /https:\/\/alpha\.example\.com/);
+  assert.match(pr.prompt, /Alpha-Setup\.exe .*direct download link: https:\/\/example\.invalid\/Alpha-Setup\.exe/);
+  assert.match(pr.prompt, /SIMPLEST/);
+  assert.match(pr.prompt, /for my dad/);
+  assert.match(pr.prompt, /a Windows PC/);
+  assert.doesNotMatch(pr.prompt, /TOKEN=secret/);
+  assert.equal(pr.zip, 'alpha.zip');
+  await assert.rejects(share.buildPrompt(alpha, { items: [] }), /at least one/);
+
+  const { jobId, file } = share.startZip(alpha);
+  for (let i = 0; i < 100 && jobs.get(jobId).status === 'running'; i++) await new Promise(r => setTimeout(r, 50));
+  assert.equal(jobs.get(jobId).status, 'success', jobs.get(jobId).summary);
+  const listing = execFileSync('python3', ['-c', 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; print("\\n".join(z.namelist()))', file], { encoding: 'utf8' }).trim().split('\n');
+  assert.ok(listing.includes('alpha/src/app.js'), listing.join(','));
+  assert.ok(listing.includes('alpha/README.md'));
+  assert.ok(!listing.some(n => /node_modules|\.env|\.git\//.test(n)), listing.join(','));
+  assert.ok(file.includes('_Share pages'));
+
+  assert.throws(() => share.savePage(alpha, 'Sure! here you go: <p>hi</p>'), /complete web page/);
+  const saved = share.savePage(alpha, 'Tip: the website is easiest.\n```html\n<!DOCTYPE html>\n<html><body><h1>Get Alpha</h1></body></html>\n```\nEnjoy!');
+  assert.equal(fs.readFileSync(saved.file, 'utf8'), '<!DOCTYPE html>\n<html><body><h1>Get Alpha</h1></body></html>');
+  assert.equal(saved.note, 'Tip: the website is easiest.');
+  assert.equal(saved.zip, file);
+  assert.equal(share.checkShareFile(saved.file), saved.file);
+  assert.throws(() => share.checkShareFile(path.join(root, 'alpha', 'README.md')), /not in a share folder/);
+});

@@ -67,6 +67,8 @@ async function loadState() {
   try { state.plans = (await api('GET', '/api/play')).plans; } catch { state.plans = {}; }
   try { state.health = await api('GET', '/api/health'); } catch { state.health = { results: {}, counts: {}, at: null }; }
   try { state.links = await api('GET', '/api/links'); } catch { state.links = { byId: {}, targets: {} }; }
+  if (state.links.refreshing) waitForLinks();
+  if (!state.editors) { state.editors = []; api('GET', '/api/editors').then(r => { state.editors = r.editors || []; renderProjects(); }).catch(() => {}); }
   renderAuth(); renderHealth(); renderProjects(); renderUploadRepos(); renderSettings(); renderClone(); renderSyncBtn();
 }
 
@@ -246,6 +248,10 @@ function playOptions(p, plan, hr) {
     if (runnable) out.push({ key: 'release', label: `\u2B07 Run latest release`, sub: `${rel.tag}: downloads and runs it`, short: `Release ${rel.tag}`, title: rel.name });
     out.push({ key: 'release-page', label: '\u{1F4E6} Open release page', sub: rel.tag, short: 'Release page' });
   }
+  const openIt = (body, label) => async () => { try { await api('POST', `/api/projects/${p.id}/open`, body); } catch (e) { alert(`Could not open ${label}: ${e.message}`); } };
+  out.push({ openIn: true, label: '\u{1F4C1} File Explorer', sub: 'the project folder', run: openIt({}, 'the folder') });
+  out.push({ openIn: true, label: '\u{1F419} GitHub repository', sub: 'in your browser', run: openIt({ github: true }, 'GitHub') });
+  for (const e of state.editors || []) out.push({ openIn: true, label: e.label, sub: e.id === 'notepad' || e.id === 'notepadpp' ? 'opens the main file' : '', run: openIt({ editor: e.id }, e.label) });
   return out;
 }
 
@@ -289,24 +295,29 @@ function renderProjects() {
       playBtn = h('button', { class: 'btn small danger-fill', title: 'Stop this project', onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, '\u25A0 Stop');
     } else {
       const opts = playOptions(p, plan, hr);
-      const target = (state.links && state.links.targets || {})[p.id] || 'local';
-      const eff = opts.find(o => o.key === target) || opts.find(o => o.key === 'local') || opts[0];
-      if (eff) {
-        const go = async via => { try { focusJob((await api('POST', `/api/projects/${p.id}/play`, { via })).jobId); } catch (e) { alert(e.message); } };
-        const menu = opts.length > 1 ? h('details', { class: 'menu playmenu' },
-          h('summary', { class: 'btn small play caret', title: 'Other ways to play' }, '\u25BE'),
-          h('div', { class: 'menu-pop right' },
-            ...opts.map(o => h('button', { class: 'btn ghost', title: o.title || '', onclick: e => { e.target.closest('details').open = false; go(o.key); } }, o.label, o.sub ? h('span', { class: 'sub' }, o.sub) : null)),
-            h('div', { class: 'menu-sep' }, 'Play button does'),
-            ...opts.filter(o => o.key !== 'release-page').map(o => h('button', { class: 'btn ghost choose' + (o.key === eff.key ? ' on' : ''), onclick: async e => {
-              e.target.closest('details').open = false;
-              try { state.links.targets = (await api('POST', `/api/projects/${p.id}/play-target`, { target: o.key })).targets; renderProjects(); } catch (err) { alert(err.message); }
-            } }, (o.key === eff.key ? '\u2713 ' : '') + o.short)))) : null;
-        playBtn = h('span', { class: 'btnpair' },
-          h('button', { class: 'btn small play' + (menu ? ' joined' : ''), title: eff.title || eff.label, onclick: () => go(eff.key) }, eff.key === 'local' ? '\u25B6 Play' : '\u25B6 ' + eff.short),
-          menu,
-          plan && plan.stopFile && eff.key === 'local' ? h('button', { class: 'btn small ghost', title: `Runs ${plan.stopFile}`, onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, 'Stop') : null);
-      }
+      const L = (state.links && state.links.byId || {})[p.id];
+      const saved = (state.links && state.links.targets || {})[p.id];
+      const target = saved || (L && L.homepage ? 'homepage' : L && L.pages ? 'pages' : 'local');
+      const runs = opts.filter(o => !o.openIn);
+      const eff = runs.find(o => o.key === target) || runs.find(o => o.key === 'local') || runs.find(o => o.key !== 'release-page') || null;
+      const go = async via => { try { focusJob((await api('POST', `/api/projects/${p.id}/play`, { via })).jobId); } catch (e) { alert(e.message); } };
+      const pick = (e, fn) => { e.target.closest('details').open = false; fn(); };
+      const choices = runs.filter(o => o.key !== 'release-page');
+      const menu = h('details', { class: 'menu playmenu' },
+        h('summary', { class: 'btn small play ' + (eff ? 'caret' : 'solo'), title: eff ? 'More ways to play and open' : 'Ways to open this project' }, eff ? '\u25BE' : '\u25B6 Play \u25BE'),
+        h('div', { class: 'menu-pop right' },
+          ...runs.map(o => h('button', { class: 'btn ghost', title: o.title || '', onclick: e => pick(e, () => go(o.key)) }, o.label, o.sub ? h('span', { class: 'sub' }, o.sub) : null)),
+          h('div', { class: 'menu-sep' }, 'Open in'),
+          ...opts.filter(o => o.openIn).map(o => h('button', { class: 'btn ghost', onclick: e => pick(e, o.run) }, o.label, o.sub ? h('span', { class: 'sub' }, o.sub) : null)),
+          h('button', { class: 'btn ghost', onclick: e => pick(e, () => openPlayDialog(p)) }, '\u2699 Set up how it runs\u2026', h('span', { class: 'sub' }, 'with ChatGPT')),
+          choices.length > 1 ? h('div', { class: 'menu-sep' }, 'Play button does') : null,
+          ...(choices.length > 1 ? choices.map(o => h('button', { class: 'btn ghost choose' + (o.key === eff.key ? ' on' : ''), onclick: e => pick(e, async () => {
+            try { state.links.targets = (await api('POST', `/api/projects/${p.id}/play-target`, { target: o.key })).targets; renderProjects(); } catch (err) { alert(err.message); }
+          }) }, (o.key === eff.key ? '\u2713 ' : '') + o.short)) : [])));
+      playBtn = h('span', { class: 'btnpair' },
+        eff ? h('button', { class: 'btn small play joined', title: eff.title || eff.label, onclick: () => go(eff.key) }, eff.key === 'local' ? '\u25B6 Play' : '\u25B6 ' + eff.short) : null,
+        menu,
+        plan && plan.stopFile && eff && eff.key === 'local' ? h('button', { class: 'btn small ghost', title: `Runs ${plan.stopFile}`, onclick: () => api('POST', `/api/projects/${p.id}/stop`).catch(e => alert(e.message)) }, 'Stop') : null);
     }
     const open = openProblems.has(p.id);
     const hTag = hr && !run ? h('span', { class: 'tag ' + (hr.ignored ? 'ignored' : hr.status), title: hr.note || hr.problem || '', onclick: () => { if (hr.status === 'fail' || hr.status === 'warn') { open ? openProblems.delete(p.id) : openProblems.add(p.id); renderProjects(); } } },
@@ -329,7 +340,7 @@ function renderProjects() {
         h('div', { class: 'arow' },
           playBtn,
           run && run.link ? h('a', { class: 'btn small', href: run.link, target: '_blank', rel: 'noopener' }, 'Open') : null,
-          h('button', { class: 'btn small', title: 'Open in File Explorer, the GitHub page, VS Code, Notepad and other installed programs', onclick: () => openWith(p) }, 'Open in\u2026')),
+          h('button', { class: 'btn small', title: 'Share it with someone: a page that walks them through getting and using it', onclick: () => openShare(p) }, '\u2197 Share')),
         h('div', { class: 'arow' },
           h('button', { class: 'btn small', title: 'Download the latest changes from GitHub', onclick: async () => { try { focusJob((await api('POST', `/api/projects/${p.id}/pull`)).jobId); } catch (e) { alert(e.message); } } }, '\u2193 Pull'),
           h('button', { class: 'btn small', title: 'Send your changes to GitHub', onclick: () => { $('upRepo').value = p.id; showTab('upload'); schedulePreview(); } }, '\u2191 Upload'),
@@ -455,27 +466,7 @@ $('dlgReset').addEventListener('click', async () => {
 
 
 /* ---------- open in editor ---------- */
-async function openWith(p) {
-  $('openTitle').textContent = `Open ${p.name} in\u2026`;
-  const list = $('openList'); list.replaceChildren(); $('openMsg').classList.add('hidden');
-  list.append(h('div', { class: 'hint' }, 'Looking for installed programs\u2026'));
-  if (!$('openDlg').open) $('openDlg').showModal();
-  let eds = [];
-  try { eds = (await api('GET', '/api/editors')).editors; } catch { /* folder still works */ }
-  list.replaceChildren();
-  const go = async (editor, label) => {
-    try { await api('POST', `/api/projects/${p.id}/open`, editor ? { editor } : {}); $('openDlg').close(); }
-    catch (e) { notice($('openMsg'), `Could not open ${label}: ${e.message}`, 'err'); }
-  };
-  list.append(h('button', { class: 'btn', onclick: () => go(null, 'the folder') }, 'File Explorer', h('span', { class: 'sub' }, 'the project folder')));
-  list.append(h('button', { class: 'btn', onclick: async () => {
-    try { await api('POST', `/api/projects/${p.id}/open`, { github: true }); $('openDlg').close(); }
-    catch (e) { notice($('openMsg'), e.message, 'err'); }
-  } }, 'GitHub repository', h('span', { class: 'sub' }, 'opens it in your browser')));
-  for (const e of eds) list.append(h('button', { class: 'btn', onclick: () => go(e.id, e.label) }, e.label,
-    e.id === 'notepad' || e.id === 'notepadpp' ? h('span', { class: 'sub' }, 'opens the main file') : null));
-}
-$('openClose').addEventListener('click', () => $('openDlg').close());
+
 
 /* ---------- health check ---------- */
 function renderHealth() {
@@ -814,3 +805,77 @@ function connectEvents() {
   }
   setInterval(renderJobs, 30000);
 })();
+
+// GitHub links load in the background; check back until they are in.
+let linksTimer = null;
+function waitForLinks(tries = 0) {
+  clearTimeout(linksTimer);
+  linksTimer = setTimeout(async () => {
+    try { state.links = await api('GET', '/api/links'); renderProjects(); } catch { /* try again */ }
+    if (state.links.refreshing && tries < 20) waitForLinks(tries + 1);
+  }, 2000);
+}
+
+/* ---------- share ---------- */
+const sh = { project: null, items: [], zipJob: null };
+async function openShare(p) {
+  sh.project = p; sh.zipJob = null;
+  $('shTitle').textContent = `Share ${p.name}`;
+  $('shItems').replaceChildren(h('div', { class: 'hint' }, 'Looking at what this project has\u2026'));
+  $('shPrompt').value = ''; $('shReply').value = ''; $('shCopied').textContent = ''; $('shResult').replaceChildren(); $('shSave').disabled = true;
+  if (!$('shareDlg').open) $('shareDlg').showModal();
+  let o;
+  try { o = await api('GET', `/api/projects/${p.id}/share`); } catch (e) { $('shItems').replaceChildren(h('div', { class: 'notice err' }, e.message)); return; }
+  sh.items = o.items;
+  $('shItems').replaceChildren(
+    ...o.items.map(i => h('label', { class: 'shitem' + (i.warn ? ' warned' : '') },
+      h('input', { type: 'checkbox', value: i.key, ...(o.recommended.includes(i.key) ? { checked: true } : {}), onchange: shareChanged }),
+      h('span', { class: 'grow' },
+        h('strong', {}, i.label, o.recommended.includes(i.key) ? h('span', { class: 'tag ok' }, 'easiest') : null),
+        h('span', { class: 'sub' }, i.sub),
+        i.warn ? h('span', { class: 'warn' }, i.warn) : null),
+      i.url ? h('button', { class: 'btn small ghost', title: 'Just copy this link', onclick: async e => { e.preventDefault(); await copyText(i.url); e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy link'; }, 1500); } }, 'Copy link') : null)),
+    ...(o.hasLinks ? [] : [h('div', { class: 'hint' }, 'GitHub links for this project have not loaded yet, so only the zip is offered. Reopen Share in a moment.')]));
+  shareChanged();
+}
+function shareChosen() { return [...$('shItems').querySelectorAll('input:checked')].map(x => x.value); }
+function shareChanged() {
+  const c = shareChosen();
+  $('shCopy').disabled = !c.length;
+  const onlyLink = c.length === 1 && ['website', 'pages'].includes(c[0]);
+  $('shSimple').classList.toggle('hidden', !onlyLink);
+  $('shPrompt').value = '';
+}
+$('shCopy').addEventListener('click', async () => {
+  const p = sh.project;
+  $('shCopied').textContent = 'Preparing\u2026';
+  try {
+    const r = await api('POST', `/api/projects/${p.id}/share/prompt`, { items: shareChosen(), device: $('shDevice').value, note: $('shNote').value });
+    $('shPrompt').value = r.prompt;
+    sh.zipJob = r.zipJobId || null;
+    const ok = await copyText(r.prompt);
+    $('shCopied').textContent = (ok ? 'Copied. Paste it into ChatGPT, then paste its reply below.' : 'Could not copy automatically: open "See exactly what gets copied" and copy it yourself.') + (r.zip ? ` Making ${r.zip} in the background.` : '');
+  } catch (e) { $('shCopied').textContent = e.message; }
+});
+$('shReply').addEventListener('input', () => { $('shSave').disabled = !$('shReply').value.trim(); $('shResult').replaceChildren(); });
+$('shSave').addEventListener('click', async () => {
+  const p = sh.project;
+  try {
+    const r = await api('POST', `/api/projects/${p.id}/share/page`, { reply: $('shReply').value });
+    const zipRunning = sh.zipJob && jobs.get(sh.zipJob) && jobs.get(sh.zipJob).meta.status === 'running';
+    const show = (file, open) => api('POST', '/api/share/show', { file, open }).catch(e => alert(e.message));
+    $('shResult').replaceChildren(h('div', { class: 'notice ok' },
+      h('div', {}, h('strong', {}, 'Share page saved. '), 'Send these to them (email, Google Drive, a message, a USB stick):'),
+      h('ul', {}, h('li', {}, h('code', {}, r.file.split(/[\\/]/).pop())),
+        r.zip || zipRunning ? h('li', {}, h('code', {}, (r.zip || '').split(/[\\/]/).pop() || `${p.name}.zip`), zipRunning ? ' (still being made, see Activity)' : '') : null),
+      r.note ? h('div', { class: 'hint' }, 'ChatGPT\u2019s note: ', r.note) : null,
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', onclick: () => show(r.file, true) }, 'Preview the page'),
+        h('button', { class: 'btn', onclick: () => show(r.file, false) }, 'Show in folder'))));
+  } catch (e) { $('shResult').replaceChildren(h('div', { class: 'notice err' }, e.message)); }
+});
+$('shClose').addEventListener('click', () => $('shareDlg').close());
+$('shSimpleCopy').addEventListener('click', async () => {
+  const i = sh.items.find(x => x.key === shareChosen()[0]);
+  if (i) { await copyText(i.url); $('shSimpleCopy').textContent = 'Copied'; setTimeout(() => { $('shSimpleCopy').textContent = 'Copy the link'; }, 1500); }
+});

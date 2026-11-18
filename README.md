@@ -8,7 +8,8 @@ A simple, local GitHub project manager for Windows. A tiny Node.js server runs o
 - **Smart exclusions**: `.git`, `node_modules`, build folders, caches, logs, secrets (`.env`, `*.pem`, `*.key`) and files over 95 MB are skipped automatically; add your own patterns in Settings
 - **Update Local GitHub**: built in (no script needed). Finds your repositories through your GitHub sign-in, shows a live progress bar, and ends with a clear list of what was updated, downloaded or paused
 - **Play** any saved project with one click: Streamline works out how it runs (see below)
-- **Online links**: each project shows the website set on its GitHub repository, its GitHub Pages address and its latest release. The ▾ next to Play can open the site or Pages, or download and run the latest release, and "Play button does" picks which one Play uses
+- **Online links**: each project shows the website set on its GitHub repository, its GitHub Pages address and its latest release. The ▾ next to Play can open the site or Pages, download and run the latest release, or open the project in File Explorer, on GitHub or in your editors. "Play button does" picks what Play does. Until you choose, a project with a website opens the website
+- **Share**: pick what to share (website, Pages, latest release, the code, or a zip of your copy) and who it is for. Streamline writes a ChatGPT prompt with the real links and project facts and asks for the simplest beginner-friendly method as one self-contained web page. Paste the reply back and the page (plus the zip) is saved in `_Share pages` in your projects folder, ready to send
 - **Remember** your projects and where they live
 - Show every clone, upload and update in an **Activity** panel with progress, errors and results
 

@@ -11,6 +11,7 @@ const upload = require('./lib/upload');
 const sync = require('./lib/sync');
 const syncfix = require('./lib/syncfix');
 const links = require('./lib/links');
+const share = require('./lib/share');
 const auth = require('./lib/auth');
 const picker = require('./lib/picker');
 const launch = require('./lib/launch');
@@ -117,6 +118,11 @@ function validSettings(b) {
 
 const routes = {
   'GET /api/links': async ({ url }) => links.status(url && url.searchParams && url.searchParams.get('refresh') === '1'),
+  'POST /api/share/show': async ({ body }) => {
+    const f = share.checkShareFile(body.file);
+    if (body.open) openUrl(f); else openFolder(path.dirname(f));
+    return { ok: true };
+  },
   'GET /api/ping': async () => ({ app: 'streamline', version: pkg.version }),
   'GET /api/state': async () => {
     const settings = store.getSettings();
@@ -257,6 +263,23 @@ async function handleApi(req, res, url) {
     if (via === 'local') return send(res, 200, { jobId: launch.start(project) });
     if (!['homepage', 'pages', 'release', 'release-page'].includes(via)) throw new HttpError(400, 'Unknown Play choice.');
     return send(res, 200, { jobId: links.play(project, via, launch) });
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/share$/)) && req.method === 'GET') {
+    return send(res, 200, share.options(findProject(m[1])));
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/share\/prompt$/)) && req.method === 'POST') {
+    const project = findProject(m[1]);
+    const items = Array.isArray(body.items) ? body.items.map(String) : [];
+    const out = await share.buildPrompt(project, { items, device: String(body.device || 'windows'), note: String(body.note || '') });
+    if (out.zip && body.makeZip !== false) out.zipJobId = share.startZip(project).jobId;
+    return send(res, 200, out);
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/share\/page$/)) && req.method === 'POST') {
+    try { return send(res, 200, share.savePage(findProject(m[1]), body.reply)); }
+    catch (e) { throw new HttpError(400, e.message); }
+  }
+  if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/share\/zip$/)) && req.method === 'POST') {
+    return send(res, 200, share.startZip(findProject(m[1])));
   }
   if ((m = url.pathname.match(/^\/api\/projects\/([a-f0-9]+)\/play-target$/)) && req.method === 'POST') {
     findProject(m[1]);
